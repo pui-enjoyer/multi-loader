@@ -36,21 +36,21 @@ local reload = ui.new_checkbox("config", "presets", "Save scripts locally") -- s
 local add = ui.new_multiselect("config", "presets", "\n", {"none"})
 local name = ui.new_textbox("config", "presets", "\n")
 
-local load = ui.new_button("config", "presets", "Load script", function()
+local btn_load = ui.new_button("config", "presets", "Load script", function()
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "script" then
         load_script(item.name)
     end
 end)
 
-local unload = ui.new_button("config", "presets", "Unload script", function()
+local btn_unload = ui.new_button("config", "presets", "Unload script", function()
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "script" then
         unload_script(item.name)
     end
 end)
 
-local enable_autoload = ui.new_button("config", "presets", "Enable autoload", function()
+local btn_enable_autoload = ui.new_button("config", "presets", "Enable autoload", function()
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "preset" then
         toggle_preset(item.data)
@@ -59,7 +59,7 @@ local enable_autoload = ui.new_button("config", "presets", "Enable autoload", fu
     end
 end)
 
-local disable_autoload = ui.new_button("config", "presets", "Disable autoload", function()
+local btn_disable_autoload = ui.new_button("config", "presets", "Disable autoload", function()
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "preset" and active_preset == item.name then
         toggle_preset(item.data)
@@ -68,7 +68,7 @@ local disable_autoload = ui.new_button("config", "presets", "Disable autoload", 
     end
 end)
 
-local create = ui.new_button("config", "presets", "Create autoload preset", function()
+local btn_create = ui.new_button("config", "presets", "Create autoload preset", function()
     local p_name = ui.get(name)
     local p_scripts = ui.get(add)
     if p_name == "" or #p_scripts == 0 then return end
@@ -100,7 +100,8 @@ function load_script(s_name)
             pcall(writefile, "multi-loader/" .. s_name, response.body)
         end
 
-        local fn, err = load(response.body, s_name)
+        local loader = loadstring or load
+        local fn, err = loader(response.body, s_name)
         if not fn then
             client.log("[multi-loader] Error: " .. tostring(err))
             return
@@ -234,11 +235,11 @@ function update_visibility()
 
     if not connected or not item then
         ui.set(info, "Failed to connect: " .. err_code)
-        ui.set_visible(load, true)
-        ui.set_visible(unload, false)
-        ui.set_visible(enable_autoload, false)
-        ui.set_visible(disable_autoload, false)
-        ui.set_visible(create, false)
+        ui.set_visible(btn_load, true)
+        ui.set_visible(btn_unload, false)
+        ui.set_visible(btn_enable_autoload, false)
+        ui.set_visible(btn_disable_autoload, false)
+        ui.set_visible(btn_create, false)
         ui.set_visible(add, false)
         ui.set_visible(name, false)
         return
@@ -251,31 +252,31 @@ function update_visibility()
     local is_script = (item.type == "script")
     local is_preset = (item.type == "preset")
 
-    ui.set_visible(create, is_new)
+    ui.set_visible(btn_create, is_new)
     ui.set_visible(add, is_new)
     ui.set_visible(name, is_new and #ui.get(add) > 0)
 
     if is_new then
-        ui.set_visible(load, false)
-        ui.set_visible(unload, false)
-        ui.set_visible(enable_autoload, false)
-        ui.set_visible(disable_autoload, false)
+        ui.set_visible(btn_load, false)
+        ui.set_visible(btn_unload, false)
+        ui.set_visible(btn_enable_autoload, false)
+        ui.set_visible(btn_disable_autoload, false)
     elseif is_script and loaded[item.name] then
-        ui.set_visible(load, false)
-        ui.set_visible(unload, true)
-        ui.set_visible(enable_autoload, false)
-        ui.set_visible(disable_autoload, false)
+        ui.set_visible(btn_load, false)
+        ui.set_visible(btn_unload, true)
+        ui.set_visible(btn_enable_autoload, false)
+        ui.set_visible(btn_disable_autoload, false)
     elseif is_preset then
         local is_active = (active_preset == item.name)
-        ui.set_visible(enable_autoload, not is_active)
-        ui.set_visible(disable_autoload, is_active)
-        ui.set_visible(load, false)
-        ui.set_visible(unload, false)
+        ui.set_visible(btn_enable_autoload, not is_active)
+        ui.set_visible(btn_disable_autoload, is_active)
+        ui.set_visible(btn_load, false)
+        ui.set_visible(btn_unload, false)
     else
-        ui.set_visible(load, true)
-        ui.set_visible(unload, false)
-        ui.set_visible(enable_autoload, false)
-        ui.set_visible(disable_autoload, false)
+        ui.set_visible(btn_load, true)
+        ui.set_visible(btn_unload, false)
+        ui.set_visible(btn_enable_autoload, false)
+        ui.set_visible(btn_disable_autoload, false)
     end
 end
 
