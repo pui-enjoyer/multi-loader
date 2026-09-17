@@ -43,8 +43,30 @@ end)
 local list = ui.new_listbox("config", "presets", " ", {""})
 local info = ui.new_label("config", "presets", "Updated 0 seconds ago")
 local reload = ui.new_checkbox("config", "presets", "Save scripts locally") -- save folder: %script%/multi-loader/
-local add = ui.new_multiselect("config", "presets", "\n", {"-"})
-local name = ui.new_textbox("config", "presets", "\n")
+
+local default_scripts = {
+    "luasensez.lua",
+    "ultra mega exploits patcher.lua"
+}
+
+if database and database.read then
+    local ok, cached = pcall(database.read, "multi_loader_cached_scripts")
+    if ok and type(cached) == "table" then
+        local seen = {}
+        for _, s in ipairs(default_scripts) do seen[s] = true end
+        for _, s in ipairs(cached) do
+            if type(s) == "string" and s:find("%.lua$") and not seen[s] then
+                table.insert(default_scripts, s)
+                seen[s] = true
+            end
+        end
+    end
+end
+
+local add = ui.new_multiselect("config", "presets", "\n", default_scripts)
+ui.set(add, {})
+local name = ui.new_textbox("config", "presets", "\n ")
+ui.set(name, "")
 
 if database and database.read then
     local ok, r = pcall(database.read, "multi_loader_save_locally")
@@ -80,6 +102,26 @@ local btn_disable_autoload = ui.new_button("config", "presets", "Disable autoloa
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "preset" and active_preset == item.name then
         toggle_preset(item.data)
+        update_list()
+        update_visibility()
+    end
+end)
+
+local btn_delete_preset = ui.new_button("config", "presets", "Delete preset", function()
+    local item = current_items[ui.get(list) + 1]
+    if item and item.type == "preset" then
+        if active_preset == item.name then
+            toggle_preset(item.data)
+        end
+        for i, p in ipairs(presets) do
+            if p.name == item.name then
+                table.remove(presets, i)
+                break
+            end
+        end
+        if database and database.write then
+            pcall(database.write, "multi_loader_presets", presets)
+        end
         update_list()
         update_visibility()
     end
@@ -227,9 +269,8 @@ function fetch_scripts()
             end
         end
 
-        if #scripts > 0 then
-            ui.update(add, scripts)
-            ui.set(add, {})
+        if #scripts > 0 and database and database.write then
+            pcall(database.write, "multi_loader_cached_scripts", scripts)
         end
 
         check_autoload()
@@ -304,6 +345,7 @@ function update_visibility()
         ui.set_visible(btn_enable_autoload, false)
         ui.set_visible(btn_disable_autoload, false)
         ui.set_visible(btn_create, false)
+        ui.set_visible(btn_delete_preset, false)
         ui.set_visible(add, false)
         ui.set_visible(name, false)
         return
@@ -325,15 +367,18 @@ function update_visibility()
         ui.set_visible(btn_unload, false)
         ui.set_visible(btn_enable_autoload, false)
         ui.set_visible(btn_disable_autoload, false)
+        ui.set_visible(btn_delete_preset, false)
     elseif is_script and loaded[item.name] then
         ui.set_visible(btn_load, false)
         ui.set_visible(btn_unload, true)
         ui.set_visible(btn_enable_autoload, false)
         ui.set_visible(btn_disable_autoload, false)
+        ui.set_visible(btn_delete_preset, false)
     elseif is_preset then
         local is_active = (active_preset == item.name)
         ui.set_visible(btn_enable_autoload, not is_active)
         ui.set_visible(btn_disable_autoload, is_active)
+        ui.set_visible(btn_delete_preset, true)
         ui.set_visible(btn_load, false)
         ui.set_visible(btn_unload, false)
     else
@@ -341,6 +386,7 @@ function update_visibility()
         ui.set_visible(btn_unload, false)
         ui.set_visible(btn_enable_autoload, false)
         ui.set_visible(btn_disable_autoload, false)
+        ui.set_visible(btn_delete_preset, false)
     end
 end
 
