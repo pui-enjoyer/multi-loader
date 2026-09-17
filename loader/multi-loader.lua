@@ -1,10 +1,16 @@
 -- multi-loader
--- repo: github.com/pui-enjoyer
+-- repo: github.com/pui-enjoyer/multi-loader
 -- credits to alaraks
 
+local http = require("gamesense/http")
 local ffi = require("ffi")
+local json = json or require("json")
 
 -- ui.new_label("config", "presets", "\a57575770‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾")
+
+local repo = "pui-enjoyer/multi-loader"
+local api_url = "https://api.github.com/repos/" .. repo .. "/contents/scripts"
+local raw_url = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/"
 
 local connected = true
 local err_code = "404"
@@ -14,41 +20,36 @@ local click_time = 0
 local click_idx = -1
 local is_updating = false
 
-local scripts = {"example scipt", "example 2"}
+local scripts = {}
+local script_urls = {}
 local loaded = {}
-local presets = {}
+local presets = database.read("multi_loader_presets") or {}
 local active_preset = nil
 local current_items = {}
 
-local build_list, update_list, update_visibility, toggle_preset
+local build_list, update_list, update_visibility, toggle_preset, fetch_scripts, load_script, unload_script
 
 local refresh = ui.new_button("config", "presets", "Refresh script list", function()
-    last_update = globals.realtime()
-    update_list()
-    update_visibility()
+    fetch_scripts()
 end)
 
 local list = ui.new_listbox("config", "presets", " ", {""})
 local info = ui.new_label("config", "presets", "Updated 0 seconds ago")
 local reload = ui.new_checkbox("config", "presets", "Save scripts locally") -- save folder: %script%/multi-loader/
-local add = ui.new_multiselect("config", "presets", "\n", scripts)
+local add = ui.new_multiselect("config", "presets", "\n", {"none"})
 local name = ui.new_textbox("config", "presets", "\n")
 
 local load = ui.new_button("config", "presets", "Load script", function()
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "script" then
-        loaded[item.name] = true
-        update_list()
-        update_visibility()
+        load_script(item.name)
     end
 end)
 
 local unload = ui.new_button("config", "presets", "Unload script", function()
     local item = current_items[ui.get(list) + 1]
     if item and item.type == "script" then
-        loaded[item.name] = nil
-        update_list()
-        update_visibility()
+        unload_script(item.name)
     end
 end)
 
@@ -76,6 +77,9 @@ local create = ui.new_button("config", "presets", "Create autoload preset", func
     if p_name == "" or #p_scripts == 0 then return end
 
     table.insert(presets, {name = p_name, scripts = p_scripts})
+    if database and database.write then
+        pcall(database.write, "multi_loader_presets", presets)
+    end
     ui.set(name, "")
     ui.set(add, {})
     update_list()
@@ -84,13 +88,76 @@ end)
 
 --social = ui.new_slider("config", "presets", "\n", 1, 2, 1, true, "", 1, {[1] = "Discord", [2] = "Telegram"})
 
+function load_script(s_name)
+    if loaded[s_name] then return end
+
+    local function run_code(code, source_label)
+        local fn, err = load(code, s_name)
+        if not fn then
+            client.log("[multi-loader] Syntax error in " .. s_name .. ": " .. tostring(err))
+            return false
+        end
+
+        local exec_ok, exec_err = pcall(fn)
+        if not exec_ok then
+            client.log("[multi-loader] Runtime error in " .. s_name .. ": " .. tostring(exec_err))
+            return false
+        end
+
+        loaded[s_name] = true
+        client.log("[multi-loader] Loaded " .. s_name .. (source_label and (" (" .. source_label .. ")") or ""))
+        update_list()
+        update_visibility()
+        return true
+    end
+
+    local url = script_urls[s_name] or (raw_url .. (s_name:gsub(" ", "%%20")))
+
+    http.get(url, {
+        headers = {
+            ["User-Agent"] = "multi-loader"
+        }
+    }, function(success, response)
+        if success and response.status == 200 then
+            local code = response.body
+            if ui.get(reload) and writefile then
+                local ok = pcall(writefile, "multi-loader/" .. s_name, code)
+                if not ok then
+                    pcall(writefile, s_name, code)
+                end
+            end
+            run_code(code)
+        else
+            if readfile then
+                local ok, local_code = pcall(readfile, "multi-loader/" .. s_name)
+                if not ok or not local_code then
+                    ok, local_code = pcall(readfile, s_name)
+                end
+                if ok and local_code and #local_code > 0 then
+                    run_code(local_code, "local")
+                    return
+                end
+            end
+            client.log("[multi-loader] Failed to load " .. s_name .. " (HTTP " .. tostring(response.status or "err") .. ")")
+        end
+    end)
+end
+
+function unload_script(s_name)
+    if not loaded[s_name] then return end
+    loaded[s_name] = nil
+    client.log("[multi-loader] Unloaded " .. s_name)
+    update_list()
+    update_visibility()
+end
+
 function toggle_preset(p)
     if not p then return end
     if active_preset == p.name then
         active_preset = nil
         if p.scripts then
             for _, s in ipairs(p.scripts) do
-                loaded[s] = nil
+                unload_script(s)
             end
         end
     else
@@ -98,7 +165,7 @@ function toggle_preset(p)
             for _, prev_p in ipairs(presets) do
                 if prev_p.name == active_preset and prev_p.scripts then
                     for _, s in ipairs(prev_p.scripts) do
-                        loaded[s] = nil
+                        unload_script(s)
                     end
                 end
             end
@@ -107,16 +174,59 @@ function toggle_preset(p)
         active_preset = p.name
         if p.scripts then
             for _, s in ipairs(p.scripts) do
-                loaded[s] = true
+                load_script(s)
             end
         end
     end
 end
 
+function fetch_scripts()
+    http.get(api_url, {
+        headers = {
+            ["User-Agent"] = "multi-loader"
+        }
+    }, function(success, response)
+        last_update = globals.realtime()
+
+        if not success or response.status ~= 200 then
+            connected = false
+            err_code = tostring(response.status or "404")
+            update_list()
+            update_visibility()
+            return
+        end
+
+        local ok, data = pcall(json.parse, response.body)
+        if not ok or type(data) ~= "table" then
+            connected = false
+            err_code = "JSON"
+            update_list()
+            update_visibility()
+            return
+        end
+
+        connected = true
+        err_code = nil
+
+        scripts = {}
+        script_urls = {}
+
+        for _, item in ipairs(data) do
+            if item.type == "file" and item.name and item.name:find("%.lua$") then
+                table.insert(scripts, item.name)
+                script_urls[item.name] = item.download_url
+            end
+        end
+
+        update_list()
+        update_visibility()
+    end)
+end
+
 function build_list()
     if not connected then
         current_items = {{type = "error"}}
-        return {"Failed to connect: " .. err_code}
+        return {"Failed to connect: " .. (err_code or "404")}
     end
 
     local display = {}
@@ -150,7 +260,9 @@ function update_list()
     is_updating = true
     local display = build_list()
     ui.update(list, display)
-    ui.update(add, scripts)
+    if #scripts > 0 then
+        ui.update(add, scripts)
+    end
     if last_idx and last_idx < #display then
         ui.set(list, last_idx)
     end
@@ -162,7 +274,7 @@ function update_visibility()
     local item = current_items[idx + 1]
 
     if not connected or not item then
-        ui.set(info, "Failed to connect: " .. err_code)
+        ui.set(info, "Failed to connect: " .. (err_code or "404"))
         ui.set_visible(load, true)
         ui.set_visible(unload, false)
         ui.set_visible(enable_autoload, false)
@@ -230,9 +342,11 @@ ui.set_callback(list, function()
         click_time = 0
 
         if item.type == "script" then
-            loaded[item.name] = not loaded[item.name]
-            update_list()
-            update_visibility()
+            if loaded[item.name] then
+                unload_script(item.name)
+            else
+                load_script(item.name)
+            end
             return
         elseif item.type == "preset" then
             toggle_preset(item.data)
@@ -267,3 +381,4 @@ end)
 
 update_list()
 update_visibility()
+fetch_scripts()
