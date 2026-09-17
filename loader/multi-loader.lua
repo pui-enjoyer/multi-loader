@@ -16,15 +16,25 @@ local last_idx = 1
 local click_time = 0
 local click_idx = -1
 local is_updating = false
+local is_loading = true
+local load_start = globals.realtime()
 
 local scripts = {}
 local script_urls = {}
 local loaded = {}
-local presets = database.read("multi_loader_presets") or {}
+local presets = (database and database.read and database.read("multi_loader_presets")) or {}
+
 local active_preset = nil
+if database and database.read then
+    local ok, saved_p = pcall(database.read, "multi_loader_active_preset")
+    if ok and type(saved_p) == "string" and #saved_p > 0 then
+        active_preset = saved_p
+    end
+end
+
 local current_items = {}
 
-local build_list, update_list, update_visibility, toggle_preset, fetch_scripts, load_script, unload_script
+local build_list, update_list, update_visibility, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload
 
 local refresh = ui.new_button("config", "presets", "Refresh script list", function()
     fetch_scripts()
@@ -33,8 +43,15 @@ end)
 local list = ui.new_listbox("config", "presets", " ", {""})
 local info = ui.new_label("config", "presets", "Updated 0 seconds ago")
 local reload = ui.new_checkbox("config", "presets", "Save scripts locally") -- save folder: %script%/multi-loader/
-local add = ui.new_multiselect("config", "presets", "\n", {"none"})
+local add = ui.new_multiselect("config", "presets", "\n", {"-"})
 local name = ui.new_textbox("config", "presets", "\n")
+
+if database and database.read then
+    local ok, r = pcall(database.read, "multi_loader_save_locally")
+    if ok and type(r) == "boolean" then
+        ui.set(reload, r)
+    end
+end
 
 local btn_load = ui.new_button("config", "presets", "Load script", function()
     local item = current_items[ui.get(list) + 1]
@@ -144,15 +161,46 @@ function toggle_preset(p)
             load_script(s)
         end
     end
+
+    if database and database.write then
+        pcall(database.write, "multi_loader_active_preset", active_preset or "")
+    end
+end
+
+function check_autoload()
+    if not active_preset then return end
+    local found = false
+    for _, p in ipairs(presets) do
+        if p.name == active_preset then
+            found = true
+            for _, s in ipairs(p.scripts or {}) do
+                load_script(s)
+            end
+            break
+        end
+    end
+    if not found then
+        active_preset = nil
+        if database and database.write then
+            pcall(database.write, "multi_loader_active_preset", "")
+        end
+    end
 end
 
 function fetch_scripts()
+    is_loading = true
+    load_start = globals.realtime()
+    update_list()
+    update_visibility()
+
     http.get(api_url, function(success, response)
         last_update = globals.realtime()
+        is_loading = false
 
         if not success or response.status ~= 200 then
             connected = false
             err_code = tostring(response.status or "404")
+            check_autoload()
             update_list()
             update_visibility()
             return
@@ -162,6 +210,7 @@ function fetch_scripts()
         if not ok or type(data) ~= "table" then
             connected = false
             err_code = "404"
+            check_autoload()
             update_list()
             update_visibility()
             return
@@ -178,6 +227,12 @@ function fetch_scripts()
             end
         end
 
+        if #scripts > 0 then
+            ui.update(add, scripts)
+            ui.set(add, {})
+        end
+
+        check_autoload()
         update_list()
         update_visibility()
     end)
@@ -195,10 +250,17 @@ function build_list()
     table.insert(display, "\a57575770 --= SCRIPTS =--")
     table.insert(current_items, {type = "header"})
 
-    for _, s in ipairs(scripts) do
-        local icon = loaded[s] and "\a909090FF◉  " or "\a808080FF○  "
-        table.insert(display, icon .. "\abfbdbdFF" .. s)
-        table.insert(current_items, {type = "script", name = s})
+    if is_loading then
+        local step = math.floor((globals.realtime() - load_start) / 0.25) % 3 + 1
+        local dots = string.rep(".", step)
+        table.insert(display, "\a808080FFLoading" .. dots)
+        table.insert(current_items, {type = "loading"})
+    else
+        for _, s in ipairs(scripts) do
+            local icon = loaded[s] and "\a909090FF◉  " or "\a808080FF○  "
+            table.insert(display, icon .. "\abfbdbdFF" .. s)
+            table.insert(current_items, {type = "script", name = s})
+        end
     end
 
     table.insert(display, "\a57575770 --= AUTOLOAD =--")
@@ -220,9 +282,6 @@ function update_list()
     is_updating = true
     local display = build_list()
     ui.update(list, display)
-    if #scripts > 0 then
-        ui.update(add, scripts)
-    end
     if last_idx and last_idx < #display then
         ui.set(list, last_idx)
     end
@@ -233,8 +292,13 @@ function update_visibility()
     local idx = ui.get(list)
     local item = current_items[idx + 1]
 
-    if not connected or not item then
-        ui.set(info, "Failed to connect: " .. err_code)
+    if not connected or not item or is_loading then
+        if not connected then
+            ui.set(info, "Failed to connect: " .. err_code)
+        elseif is_loading then
+            local step = math.floor((globals.realtime() - load_start) / 0.25) % 3 + 1
+            ui.set(info, "Loading" .. string.rep(".", step))
+        end
         ui.set_visible(btn_load, true)
         ui.set_visible(btn_unload, false)
         ui.set_visible(btn_enable_autoload, false)
@@ -287,7 +351,7 @@ ui.set_callback(list, function()
     local item = current_items[idx + 1]
     if not item then return end
 
-    if item.type == "header" then
+    if item.type == "header" or item.type == "loading" or item.type == "error" then
         is_updating = true
         ui.set(list, last_idx)
         is_updating = false
@@ -329,9 +393,29 @@ ui.set_callback(add, function()
     end
 end)
 
+ui.set_callback(reload, function()
+    if database and database.write then
+        pcall(database.write, "multi_loader_save_locally", ui.get(reload))
+    end
+end)
+
 local last_sec = -1
+local last_step = -1
 client.set_event_callback("paint_ui", function()
-    if not connected or not ui.is_menu_open() then return end
+    if not ui.is_menu_open() then return end
+
+    if is_loading then
+        local step = math.floor((globals.realtime() - load_start) / 0.25) % 3 + 1
+        if step ~= last_step then
+            last_step = step
+            update_list()
+            ui.set(info, "Loading" .. string.rep(".", step))
+        end
+        return
+    end
+
+    if not connected then return end
+
     local sec = math.floor(globals.realtime() - last_update)
     if sec ~= last_sec then
         last_sec = sec
