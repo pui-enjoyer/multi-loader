@@ -2,6 +2,679 @@
 -- repo: github.com/pui-enjoyer/multi-loader
 -- credits to alaraks
 
+-- Emergency repair if angelwings or a troll script poisoned globals in this session
+if rawget(_G, "org_delay_call") and type(rawget(_G, "org_delay_call")) == "function" then
+    client.delay_call = rawget(_G, "org_delay_call")
+    rawset(_G, "org_delay_call", nil)
+end
+if rawget(_G, "org_req") and type(rawget(_G, "org_req")) == "function" then
+    require = rawget(_G, "org_req")
+    rawset(_G, "org_req", nil)
+end
+
+local real_client = client
+local real_client_delay_call = client.delay_call
+local real_client_set_event_callback = client.set_event_callback
+local real_client_unset_event_callback = client.unset_event_callback
+local real_client_log = client.log
+local real_ui = ui
+local real_ui_set_visible = ui.set_visible
+local real_ui_set_enabled = ui.set_enabled
+local real_ui_set_callback = ui.set_callback
+local real_ui_new_checkbox = ui.new_checkbox
+local real_ui_new_slider = ui.new_slider
+local real_ui_new_combobox = ui.new_combobox
+local real_ui_new_multiselect = ui.new_multiselect
+local real_ui_new_hotkey = ui.new_hotkey
+local real_ui_new_button = ui.new_button
+local real_ui_new_color_picker = ui.new_color_picker
+local real_ui_new_textbox = ui.new_textbox
+local real_ui_new_listbox = ui.new_listbox
+local real_ui_new_label = ui.new_label
+local real_ui_new_string = ui.new_string
+local real_require = require
+local real_loadstring = loadstring or load
+
+local ml_runtime = {
+    scripts = {},
+    ref_owners = {},
+    active_loading = nil,
+    active_context = nil,
+    orig_ui_fns = {}
+}
+
+local function track_ui_create(s_name, c_type, orig_fn, tab, container, name, ...)
+    local sc = ml_runtime.scripts[s_name]
+    if not sc then
+        return orig_fn(tab, container, name, ...)
+    end
+
+    local base_key = string.format("%s:%s:%s:%s", tostring(c_type), tostring(tab), tostring(container), tostring(name))
+    local count = (sc.load_counts[base_key] or 0) + 1
+    sc.load_counts[base_key] = count
+    local key = base_key .. "#" .. count
+
+    local existing_ref = sc.ui_keys[key]
+    if existing_ref ~= nil then
+        pcall(real_ui_set_visible, existing_ref, true)
+        pcall(real_ui_set_enabled, existing_ref, true)
+        if c_type == "button" then
+            local cb = ...
+            if type(cb) == "function" then
+                local wrapped_btn = function(...)
+                    if not sc.active then return end
+                    local prev_ctx = ml_runtime.active_context
+                    ml_runtime.active_context = s_name
+                    local ok, err = pcall(cb, ...)
+                    ml_runtime.active_context = prev_ctx
+                    if not ok then
+                        real_client_log(string.format("[multi-loader] Error in button (%s): %s", s_name, tostring(err)))
+                    end
+                end
+                pcall(real_ui_set_callback, existing_ref, wrapped_btn)
+            end
+        elseif c_type == "combobox" or c_type == "multiselect" or c_type == "listbox" then
+            local args = { ... }
+            if #args > 0 and ui.update then
+                pcall(ui.update, existing_ref, unpack(args))
+            end
+        end
+        return existing_ref
+    end
+
+    local ref
+    if c_type == "button" then
+        local cb = ...
+        if type(cb) == "function" then
+            local wrapped_btn = function(...)
+                if not sc.active then return end
+                local prev_ctx = ml_runtime.active_context
+                ml_runtime.active_context = s_name
+                local ok, err = pcall(cb, ...)
+                ml_runtime.active_context = prev_ctx
+                if not ok then
+                    real_client_log(string.format("[multi-loader] Error in button (%s): %s", s_name, tostring(err)))
+                end
+            end
+            ref = orig_fn(tab, container, name, wrapped_btn)
+        else
+            ref = orig_fn(tab, container, name, cb)
+        end
+    else
+        ref = orig_fn(tab, container, name, ...)
+    end
+
+    if ref ~= nil then
+        sc.ui_keys[key] = ref
+        table.insert(sc.ui_refs, ref)
+        ml_runtime.ref_owners[ref] = s_name
+    end
+    return ref
+end
+
+local function track_ui_string(s_name, name, default)
+    local sc = ml_runtime.scripts[s_name]
+    if not sc or not real_ui_new_string then
+        return real_ui_new_string and real_ui_new_string(name, default)
+    end
+    local key = "string:" .. tostring(name)
+    local count = (sc.load_counts[key] or 0) + 1
+    sc.load_counts[key] = count
+    local full_key = key .. "#" .. count
+
+    local existing_ref = sc.ui_keys[full_key]
+    if existing_ref ~= nil then
+        return existing_ref
+    end
+
+    local ref = real_ui_new_string(name, default)
+    if ref ~= nil then
+        sc.ui_keys[full_key] = ref
+        table.insert(sc.ui_refs, ref)
+        ml_runtime.ref_owners[ref] = s_name
+    end
+    return ref
+end
+
+local function script_set_event_callback(s_name, event, fn)
+    if type(event) ~= "string" or type(fn) ~= "function" then return end
+    local sc = ml_runtime.scripts[s_name]
+    if not sc then return end
+
+    if event == "shutdown" then
+        table.insert(sc.shutdown_cbs, fn)
+        return
+    end
+
+    for _, cb in ipairs(sc.callbacks) do
+        if cb.event == event and cb.raw_fn == fn then
+            return
+        end
+    end
+
+    local wrapped_fn = function(...)
+        if not sc.active then return end
+        local prev_ctx = ml_runtime.active_context
+        ml_runtime.active_context = s_name
+        local ok, r1, r2, r3, r4 = pcall(fn, ...)
+        ml_runtime.active_context = prev_ctx
+        if not ok then
+            real_client_log(string.format("[multi-loader] Error in %s (%s): %s", s_name, event, tostring(r1)))
+            return
+        end
+        return r1, r2, r3, r4
+    end
+
+    table.insert(sc.callbacks, {
+        event = event,
+        raw_fn = fn,
+        wrapped_fn = wrapped_fn
+    })
+
+    real_client_set_event_callback(event, wrapped_fn)
+end
+
+local function script_unset_event_callback(s_name, event, fn)
+    if type(event) ~= "string" or type(fn) ~= "function" then return end
+    local sc = ml_runtime.scripts[s_name]
+    if not sc then return end
+
+    if event == "shutdown" then
+        for i, f in ipairs(sc.shutdown_cbs) do
+            if f == fn then
+                table.remove(sc.shutdown_cbs, i)
+                break
+            end
+        end
+        return
+    end
+
+    for i, cb in ipairs(sc.callbacks) do
+        if cb.event == event and cb.raw_fn == fn then
+            pcall(real_client_unset_event_callback, event, cb.wrapped_fn)
+            table.remove(sc.callbacks, i)
+            break
+        end
+    end
+end
+
+local function script_delay_call(s_name, delay, fn)
+    if type(fn) ~= "function" then return end
+    local sc = ml_runtime.scripts[s_name]
+    if not sc then return end
+
+    local token = {}
+    sc.timers[token] = true
+
+    return real_client_delay_call(delay, function(...)
+        if not sc.active or not sc.timers[token] then
+            return
+        end
+        sc.timers[token] = nil
+        local prev_ctx = ml_runtime.active_context
+        ml_runtime.active_context = s_name
+        local ok, err = pcall(fn, ...)
+        ml_runtime.active_context = prev_ctx
+        if not ok then
+            real_client_log(string.format("[multi-loader] Error in delay_call (%s): %s", s_name, tostring(err)))
+        end
+    end)
+end
+
+local ml_embedded_json
+do
+    local json = { _version = "0.1.2" }
+    local encode
+    local escape_char_map = {
+        [ "\\" ] = "\\",
+        [ "\"" ] = "\"",
+        [ "\b" ] = "b",
+        [ "\f" ] = "f",
+        [ "\n" ] = "n",
+        [ "\r" ] = "r",
+        [ "\t" ] = "t",
+    }
+    local escape_char_map_inv = { [ "/" ] = "/" }
+    for k, v in pairs(escape_char_map) do escape_char_map_inv[v] = k end
+
+    local function escape_char(c)
+        return "\\" .. (escape_char_map[c] or string.format("u%04x", c:byte()))
+    end
+
+    local function encode_nil(val) return "null" end
+
+    local function encode_table(val, stack)
+        local res = {}
+        stack = stack or {}
+        if stack[val] then error("circular reference") end
+        stack[val] = true
+
+        if rawget(val, 1) ~= nil or next(val) == nil then
+            local n = 0
+            for k in pairs(val) do
+                if type(k) ~= "number" then error("invalid table: mixed or invalid key types") end
+                n = n + 1
+            end
+            if n ~= #val then error("invalid table: sparse array") end
+            for i, v in ipairs(val) do table.insert(res, encode(v, stack)) end
+            stack[val] = nil
+            return "[" .. table.concat(res, ",") .. "]"
+        else
+            for k, v in pairs(val) do
+                if type(k) ~= "string" then error("invalid table: mixed or invalid key types") end
+                table.insert(res, encode(k, stack) .. ":" .. encode(v, stack))
+            end
+            stack[val] = nil
+            return "{" .. table.concat(res, ",") .. "}"
+        end
+    end
+
+    local function encode_string(val)
+        return '"' .. val:gsub('[%z\1-\31\\"]', escape_char) .. '"'
+    end
+
+    local function encode_number(val)
+        if val ~= val or val <= -math.huge or val >= math.huge then
+            error("unexpected number value '" .. tostring(val) .. "'")
+        end
+        return string.format("%.14g", val)
+    end
+
+    local type_func_map = {
+        [ "nil"     ] = encode_nil,
+        [ "table"   ] = encode_table,
+        [ "string"  ] = encode_string,
+        [ "number"  ] = encode_number,
+        [ "boolean" ] = tostring,
+    }
+
+    encode = function(val, stack)
+        local t = type(val)
+        local f = type_func_map[t]
+        if f then return f(val, stack) end
+        error("unexpected type '" .. t .. "'")
+    end
+
+    function json.encode(val) return ( encode(val) ) end
+
+    local parse
+
+    local function create_set(...)
+        local res = {}
+        for i = 1, select("#", ...) do res[ select(i, ...) ] = true end
+        return res
+    end
+
+    local space_chars   = create_set(" ", "\t", "\r", "\n")
+    local delim_chars   = create_set(" ", "\t", "\r", "\n", "]", "}", ",")
+    local escape_chars  = create_set("\\", "/", '"', "b", "f", "n", "r", "t", "u")
+    local literals      = create_set("true", "false", "null")
+
+    local literal_map = {
+        [ "true"  ] = true,
+        [ "false" ] = false,
+        [ "null"  ] = nil,
+    }
+
+    local function next_char(str, idx, set, negate)
+        for i = idx, #str do
+            if set[str:sub(i, i)] ~= negate then return i end
+        end
+        return #str + 1
+    end
+
+    local function decode_error(str, idx, msg)
+        local line_count = 1
+        local col_count = 1
+        for i = 1, idx - 1 do
+            col_count = col_count + 1
+            if str:sub(i, i) == "\n" then
+                line_count = line_count + 1
+                col_count = 1
+            end
+        end
+        error(string.format("%s at line %d col %d", msg, line_count, col_count))
+    end
+
+    local function codepoint_to_utf8(n)
+        local f = math.floor
+        if n <= 0x7f then
+            return string.char(n)
+        elseif n <= 0x7ff then
+            return string.char(f(n / 64) + 192, n % 64 + 128)
+        elseif n <= 0xffff then
+            return string.char(f(n / 4096) + 224, f(n % 4096 / 64) + 128, n % 64 + 128)
+        elseif n <= 0x10ffff then
+            return string.char(f(n / 262144) + 240, f(n % 262144 / 4096) + 128, f(n % 4096 / 64) + 128, n % 64 + 128)
+        end
+        error(string.format("invalid unicode codepoint '%x'", n))
+    end
+
+    local function parse_unicode_escape(s)
+        local n1 = tonumber(s:sub(1, 4), 16)
+        local n2 = tonumber(s:sub(7, 10), 16)
+        if n2 then
+            return codepoint_to_utf8((n1 - 0xd800) * 0x400 + (n2 - 0xdc00) + 0x10000)
+        else
+            return codepoint_to_utf8(n1)
+        end
+    end
+
+    local function parse_string(str, i)
+        local res = ""
+        local j = i + 1
+        local k = j
+        while j <= #str do
+            local x = str:byte(j)
+            if x < 32 then
+                decode_error(str, j, "control character in string")
+            elseif x == 92 then
+                res = res .. str:sub(k, j - 1)
+                j = j + 1
+                local c = str:sub(j, j)
+                if c == "u" then
+                    local hex = str:match("^[dD][89aAbB]%x%x\\u%x%x%x%x", j + 1)
+                             or str:match("^%x%x%x%x", j + 1)
+                             or decode_error(str, j - 1, "invalid unicode escape in string")
+                    res = res .. parse_unicode_escape(hex)
+                    j = j + #hex
+                else
+                    if not escape_chars[c] then
+                        decode_error(str, j - 1, "invalid escape char '" .. c .. "' in string")
+                    end
+                    res = res .. escape_char_map_inv[c]
+                end
+                k = j + 1
+            elseif x == 34 then
+                res = res .. str:sub(k, j - 1)
+                return res, j + 1
+            end
+            j = j + 1
+        end
+        decode_error(str, i, "expected closing quote for string")
+    end
+
+    local function parse_number(str, i)
+        local x = next_char(str, i, delim_chars)
+        local s = str:sub(i, x - 1)
+        local n = tonumber(s)
+        if not n then decode_error(str, i, "invalid number '" .. s .. "'") end
+        return n, x
+    end
+
+    local function parse_literal(str, i)
+        local x = next_char(str, i, delim_chars)
+        local word = str:sub(i, x - 1)
+        if not literals[word] then decode_error(str, i, "invalid literal '" .. word .. "'") end
+        return literal_map[word], x
+    end
+
+    local function parse_array(str, i)
+        local res = {}
+        local n = 1
+        i = i + 1
+        while 1 do
+            local x
+            i = next_char(str, i, space_chars, true)
+            if str:sub(i, i) == "]" then
+                i = i + 1
+                break
+            end
+            x, i = parse(str, i)
+            res[n] = x
+            n = n + 1
+            i = next_char(str, i, space_chars, true)
+            local chr = str:sub(i, i)
+            i = i + 1
+            if chr == "]" then break end
+            if chr ~= "," then decode_error(str, i, "expected ']' or ','") end
+        end
+        return res, i
+    end
+
+    local function parse_object(str, i)
+        local res = {}
+        i = i + 1
+        while 1 do
+            local key, val
+            i = next_char(str, i, space_chars, true)
+            if str:sub(i, i) == "}" then
+                i = i + 1
+                break
+            end
+            if str:sub(i, i) ~= '"' then decode_error(str, i, "expected string for key") end
+            key, i = parse(str, i)
+            i = next_char(str, i, space_chars, true)
+            if str:sub(i, i) ~= ":" then decode_error(str, i, "expected ':' after key") end
+            i = next_char(str, i + 1, space_chars, true)
+            val, i = parse(str, i)
+            res[key] = val
+            i = next_char(str, i, space_chars, true)
+            local chr = str:sub(i, i)
+            i = i + 1
+            if chr == "}" then break end
+            if chr ~= "," then decode_error(str, i, "expected '}' or ','") end
+        end
+        return res, i
+    end
+
+    local char_func_map = {
+        [ '"' ] = parse_string,
+        [ "0" ] = parse_number,
+        [ "1" ] = parse_number,
+        [ "2" ] = parse_number,
+        [ "3" ] = parse_number,
+        [ "4" ] = parse_number,
+        [ "5" ] = parse_number,
+        [ "6" ] = parse_number,
+        [ "7" ] = parse_number,
+        [ "8" ] = parse_number,
+        [ "9" ] = parse_number,
+        [ "-" ] = parse_number,
+        [ "t" ] = parse_literal,
+        [ "f" ] = parse_literal,
+        [ "n" ] = parse_literal,
+        [ "[" ] = parse_array,
+        [ "{" ] = parse_object,
+    }
+
+    parse = function(str, idx)
+        local chr = str:sub(idx, idx)
+        local f = char_func_map[chr]
+        if f then return f(str, idx) end
+        decode_error(str, idx, "unexpected character '" .. chr .. "'")
+    end
+
+    function json.parse(str)
+        if type(str) ~= "string" then error("expected argument of type string, got " .. type(str)) end
+        local res, idx = parse(str, next_char(str, 1, space_chars, true))
+        idx = next_char(str, idx, space_chars, true)
+        if idx <= #str then decode_error(str, idx, "trailing garbage") end
+        return res
+    end
+
+    json.decode = json.parse
+    json.stringify = json.encode
+
+    ml_embedded_json = function() return json end
+
+    if package and package.preload then
+        package.preload["json"] = ml_embedded_json
+        package.preload["gamesense/json"] = ml_embedded_json
+    end
+end
+
+local function create_script_env(s_name)
+    local sc = ml_runtime.scripts[s_name]
+    local env = {}
+
+    local script_client = {}
+    for k, v in pairs(real_client) do
+        script_client[k] = v
+    end
+    script_client.set_event_callback = function(event, fn)
+        return script_set_event_callback(s_name, event, fn)
+    end
+    script_client.unset_event_callback = function(event, fn)
+        return script_unset_event_callback(s_name, event, fn)
+    end
+    script_client.delay_call = function(delay, fn)
+        return script_delay_call(s_name, delay, fn)
+    end
+
+    local script_ui = {}
+    for k, v in pairs(real_ui) do
+        script_ui[k] = v
+    end
+    script_ui.new_checkbox = function(...) return track_ui_create(s_name, "checkbox", real_ui_new_checkbox, ...) end
+    script_ui.new_slider = function(...) return track_ui_create(s_name, "slider", real_ui_new_slider, ...) end
+    script_ui.new_combobox = function(...) return track_ui_create(s_name, "combobox", real_ui_new_combobox, ...) end
+    script_ui.new_multiselect = function(...) return track_ui_create(s_name, "multiselect", real_ui_new_multiselect, ...) end
+    script_ui.new_hotkey = function(...) return track_ui_create(s_name, "hotkey", real_ui_new_hotkey, ...) end
+    script_ui.new_button = function(...) return track_ui_create(s_name, "button", real_ui_new_button, ...) end
+    script_ui.new_color_picker = function(...) return track_ui_create(s_name, "color_picker", real_ui_new_color_picker, ...) end
+    script_ui.new_textbox = function(...) return track_ui_create(s_name, "textbox", real_ui_new_textbox, ...) end
+    script_ui.new_listbox = function(...) return track_ui_create(s_name, "listbox", real_ui_new_listbox, ...) end
+    script_ui.new_label = function(...) return track_ui_create(s_name, "label", real_ui_new_label, ...) end
+    script_ui.new_string = function(...) return track_ui_string(s_name, ...) end
+    script_ui.set_callback = function(...) return ui.set_callback(...) end
+
+    env.client = script_client
+    env.ui = script_ui
+    env.require = function(mod_name)
+        if mod_name == "gamesense/http" then
+            local real_mod = real_require("gamesense/http")
+            return {
+                get = function(...) return real_mod.get(...) end,
+                post = function(...) return real_mod.post(...) end
+            }
+        end
+        if mod_name == "json" or mod_name == "gamesense/json" then
+            local ok, mod = pcall(real_require, mod_name)
+            if ok and type(mod) == "table" then
+                return mod
+            end
+            return ml_embedded_json()
+        end
+        local is_shared = (type(mod_name) ~= "string") or mod_name:find("^gamesense/") or mod_name == "ffi" or mod_name == "bit" or mod_name == "vector" or mod_name == "json"
+        if not is_shared then
+            sc.required_modules = sc.required_modules or {}
+            table.insert(sc.required_modules, mod_name)
+        end
+        return real_require(mod_name)
+    end
+
+    env._G = env
+    env._NAME = s_name
+
+    setmetatable(env, {
+        __index = _G,
+        __newindex = function(t, k, v)
+            rawset(t, k, v)
+        end
+    })
+
+    return env
+end
+
+do
+    local create_map = {
+        checkbox = real_ui_new_checkbox,
+        slider = real_ui_new_slider,
+        combobox = real_ui_new_combobox,
+        multiselect = real_ui_new_multiselect,
+        hotkey = real_ui_new_hotkey,
+        button = real_ui_new_button,
+        color_picker = real_ui_new_color_picker,
+        textbox = real_ui_new_textbox,
+        listbox = real_ui_new_listbox,
+        label = real_ui_new_label,
+    }
+    ml_runtime.orig_ui_fns = create_map
+
+    for c_type, orig_fn in pairs(create_map) do
+        local fn_name = "new_" .. c_type
+        ui[fn_name] = function(...)
+            local active_s = ml_runtime.active_loading or ml_runtime.active_context
+            if active_s then
+                return track_ui_create(active_s, c_type, orig_fn, ...)
+            end
+            return orig_fn(...)
+        end
+    end
+
+    if real_ui_new_string then
+        ui.new_string = function(...)
+            local active_s = ml_runtime.active_loading or ml_runtime.active_context
+            if active_s then
+                return track_ui_string(active_s, ...)
+            end
+            return real_ui_new_string(...)
+        end
+    end
+
+    ui.set_callback = function(ref, fn)
+        local active_s = ml_runtime.ref_owners[ref] or ml_runtime.active_loading or ml_runtime.active_context
+        if active_s and ml_runtime.scripts[active_s] then
+            local sc = ml_runtime.scripts[active_s]
+            sc.ui_callbacks = sc.ui_callbacks or {}
+            if type(fn) == "function" then
+                local wrapped_ui_cb = function(...)
+                    if not sc.active then return end
+                    local prev_ctx = ml_runtime.active_context
+                    ml_runtime.active_context = active_s
+                    local ok, err = pcall(fn, ...)
+                    ml_runtime.active_context = prev_ctx
+                    if not ok then
+                        real_client_log(string.format("[multi-loader] Error in UI callback (%s): %s", active_s, tostring(err)))
+                    end
+                end
+                sc.ui_callbacks[ref] = wrapped_ui_cb
+                return real_ui_set_callback(ref, wrapped_ui_cb)
+            else
+                sc.ui_callbacks[ref] = nil
+                return real_ui_set_callback(ref, fn)
+            end
+        end
+        return real_ui_set_callback(ref, fn)
+    end
+
+    client.set_event_callback = function(event, fn)
+        local active_s = ml_runtime.active_loading or ml_runtime.active_context
+        if active_s then
+            return script_set_event_callback(active_s, event, fn)
+        end
+        return real_client_set_event_callback(event, fn)
+    end
+
+    client.unset_event_callback = function(event, fn)
+        local active_s = ml_runtime.active_loading or ml_runtime.active_context
+        if active_s then
+            return script_unset_event_callback(active_s, event, fn)
+        end
+        for _, sc in pairs(ml_runtime.scripts) do
+            if sc.callbacks then
+                for i, cb in ipairs(sc.callbacks) do
+                    if cb.event == event and cb.raw_fn == fn then
+                        pcall(real_client_unset_event_callback, event, cb.wrapped_fn)
+                        table.remove(sc.callbacks, i)
+                        return
+                    end
+                end
+            end
+        end
+        return real_client_unset_event_callback(event, fn)
+    end
+
+    client.delay_call = function(delay, fn)
+        local active_s = ml_runtime.active_loading or ml_runtime.active_context
+        if active_s then
+            return script_delay_call(active_s, delay, fn)
+        end
+        return real_client_delay_call(delay, fn)
+    end
+end
+
 local http = require("gamesense/http")
 local ffi = require("ffi")
 local pui = require("gamesense/pui")
@@ -257,18 +930,14 @@ end
 local btn_load_script = menu:button("Load script", function()
     local item = current_items[list:get() + 1]
     if item and item.type == "script" then
-        client.delay_call(0, function()
-            load_script(item.name)
-        end)
+        load_script(item.name)
     end
 end)
 
 local btn_unload_script = menu:button("Unload script", function()
     local item = current_items[list:get() + 1]
     if item and item.type == "script" then
-        client.delay_call(0, function()
-            unload_script(item.name)
-        end)
+        unload_script(item.name)
     end
 end)
 
@@ -324,9 +993,7 @@ local btn_load_preset = menu:button("Load preset", function()
     local item = current_items[list:get() + 1]
     if item and item.type == "preset" then
         if active_preset ~= item.name then
-            client.delay_call(0, function()
-                toggle_preset(item.data)
-            end)
+            toggle_preset(item.data)
         end
     end
 end)
@@ -335,9 +1002,7 @@ local btn_unload_preset = menu:button("Unload preset", function()
     local item = current_items[list:get() + 1]
     if item and item.type == "preset" then
         if active_preset == item.name then
-            client.delay_call(0, function()
-                toggle_preset(item.data)
-            end)
+            toggle_preset(item.data)
         end
     end
 end)
@@ -433,23 +1098,64 @@ local function execute_chunk(body, s_name, silent)
         body = body:sub(4)
     end
 
+    local sc = ml_runtime.scripts[s_name]
+    if not sc then
+        sc = {
+            active = true,
+            ui_keys = {},
+            ui_refs = {},
+            load_counts = {},
+            callbacks = {},
+            timers = {},
+            shutdown_cbs = {},
+            ui_callbacks = {},
+            required_modules = {}
+        }
+        ml_runtime.scripts[s_name] = sc
+    else
+        sc.active = true
+        sc.load_counts = {}
+        sc.callbacks = {}
+        sc.timers = {}
+        sc.shutdown_cbs = {}
+        sc.ui_callbacks = sc.ui_callbacks or {}
+        sc.required_modules = sc.required_modules or {}
+    end
+
     local loader = loadstring or load
     local fn, err = loader(body, s_name)
     if not fn then
-        client.log("[multi-loader] Error: " .. tostring(err))
+        client.log("[multi-loader] Compile error in " .. s_name .. ": " .. tostring(err))
         loaded[s_name] = nil
         if not silent then
             update_list()
+            update_visibility()
         end
         return false
     end
 
+    local env = create_script_env(s_name)
+    if setfenv then
+        setfenv(fn, env)
+    end
+
+    local prev_loading = ml_runtime.active_loading
+    local prev_ctx = ml_runtime.active_context
+    ml_runtime.active_loading = s_name
+    ml_runtime.active_context = s_name
+
     local ok, runtime_err = pcall(fn)
+
+    ml_runtime.active_loading = prev_loading
+    ml_runtime.active_context = prev_ctx
+
     if not ok then
         client.log("[multi-loader] Runtime error in " .. s_name .. ": " .. tostring(runtime_err))
+        unload_script(s_name, true)
         loaded[s_name] = nil
         if not silent then
             update_list()
+            update_visibility()
         end
         return false
     end
@@ -458,6 +1164,7 @@ local function execute_chunk(body, s_name, silent)
     script_load_times[s_name] = globals.realtime()
     if not silent then
         update_list()
+        update_visibility()
     end
     return true
 end
@@ -616,11 +1323,60 @@ function load_script(s_name, silent)
 end
 
 function unload_script(s_name, silent)
-    if not loaded[s_name] then return end
+    if not loaded[s_name] and not (ml_runtime.scripts[s_name] and ml_runtime.scripts[s_name].active) then
+        return
+    end
+
+    local sc = ml_runtime.scripts[s_name]
+    if sc then
+        sc.active = false
+
+        -- 1. Call registered shutdown callbacks
+        for _, s_fn in ipairs(sc.shutdown_cbs) do
+            local prev_ctx = ml_runtime.active_context
+            ml_runtime.active_context = s_name
+            pcall(s_fn)
+            ml_runtime.active_context = prev_ctx
+        end
+        sc.shutdown_cbs = {}
+
+        -- 2. Unregister event callbacks
+        for _, cb in ipairs(sc.callbacks) do
+            pcall(real_client_unset_event_callback, cb.event, cb.wrapped_fn)
+        end
+        sc.callbacks = {}
+
+        -- 3. Invalidate active timers
+        sc.timers = {}
+
+        -- 4. Neutralize UI callbacks
+        if sc.ui_callbacks then
+            for ref, _ in pairs(sc.ui_callbacks) do
+                pcall(real_ui_set_callback, ref, function() end)
+            end
+            sc.ui_callbacks = {}
+        end
+
+        -- 5. Hide and disable all UI elements created by this script
+        for _, ref in ipairs(sc.ui_refs) do
+            pcall(real_ui_set_visible, ref, false)
+            pcall(real_ui_set_enabled, ref, false)
+        end
+
+        -- 6. Clean up required custom modules if any
+        if sc.required_modules then
+            for _, mod in ipairs(sc.required_modules) do
+                package.loaded[mod] = nil
+            end
+            sc.required_modules = {}
+        end
+    end
+
     loaded[s_name] = nil
     script_unload_times[s_name] = globals.realtime()
     if not silent then
         update_list()
+        update_visibility()
     end
 end
 
@@ -875,45 +1631,6 @@ function fetch_scripts()
     end)
 end
 
-local CHAR_WIDTHS = {
-    [' '] = 4, ['!'] = 2, ['"'] = 4, ['#'] = 6, ['$'] = 6, ['%'] = 7, ['&'] = 6, ["'"] = 2,
-    ['('] = 3, [')'] = 3, ['*'] = 4, ['+'] = 6, [','] = 2, ['-'] = 5, ['.'] = 2, ['/'] = 4,
-    ['0'] = 6, ['1'] = 4, ['2'] = 6, ['3'] = 6, ['4'] = 6, ['5'] = 6, ['6'] = 6, ['7'] = 6,
-    ['8'] = 6, ['9'] = 6, [':'] = 2, [';'] = 2, ['<'] = 5, ['='] = 6, ['>'] = 5, ['?'] = 5,
-    ['@'] = 7,
-    ['A'] = 6, ['B'] = 6, ['C'] = 6, ['D'] = 6, ['E'] = 6, ['F'] = 5, ['G'] = 6, ['H'] = 6,
-    ['I'] = 2, ['J'] = 5, ['K'] = 6, ['L'] = 5, ['M'] = 9, ['N'] = 6, ['O'] = 6, ['P'] = 6,
-    ['Q'] = 6, ['R'] = 6, ['S'] = 6, ['T'] = 5, ['U'] = 6, ['V'] = 6, ['W'] = 9, ['X'] = 6,
-    ['Y'] = 6, ['Z'] = 6,
-    ['a'] = 6, ['b'] = 6, ['c'] = 6, ['d'] = 6, ['e'] = 6, ['f'] = 5, ['g'] = 6, ['h'] = 6,
-    ['i'] = 2, ['j'] = 4, ['k'] = 6, ['l'] = 2, ['m'] = 8, ['n'] = 6, ['o'] = 6, ['p'] = 6,
-    ['q'] = 6, ['r'] = 5, ['s'] = 6, ['t'] = 5, ['u'] = 6, ['v'] = 6, ['w'] = 8, ['x'] = 6,
-    ['y'] = 6, ['z'] = 6,
-    ['['] = 3, ['\\'] = 4, [']'] = 3, ['^'] = 5, ['_'] = 5, ['`'] = 3, ['{'] = 4, ['|'] = 2,
-    ['}'] = 4, ['~'] = 6
-}
-
-local function get_string_width(str)
-    local total = 0
-    for i = 1, #str do
-        local ch = str:sub(i, i)
-        total = total + (CHAR_WIDTHS[ch] or 6)
-    end
-    return total
-end
-
-local function extract_name_and_tag(str)
-    local r_rest, r_tag = str:match("^(.-)%s*(%b[])$")
-    if r_tag and #r_rest > 0 then
-        return r_rest, r_tag
-    end
-    local l_tag, l_rest = str:match("^(%b[])%s*(.*)$")
-    if l_tag and #l_rest > 0 then
-        return l_rest, l_tag
-    end
-    return str, nil
-end
-
 function build_list()
     if not connected and #scripts == 0 then
         current_items = {{type = "error"}}
@@ -927,25 +1644,6 @@ function build_list()
     table.insert(display, header_text)
     table.insert(current_items, {type = "header"})
 
-    local max_name_w = 0
-    for _, s in ipairs(scripts) do
-        local display_name = s:gsub("%.lua$", "")
-        local name, tag = extract_name_and_tag(display_name)
-        if tag then
-            local w = get_string_width(name)
-            if w > max_name_w then max_name_w = w end
-        end
-    end
-    for _, p in ipairs(presets) do
-        local display_name = p.name:gsub("%.lua$", "")
-        local name, tag = extract_name_and_tag(display_name)
-        if tag then
-            local w = get_string_width(name)
-            if w > max_name_w then max_name_w = w end
-        end
-    end
-    local target_tag_x = math.max(120, max_name_w + 12)
-
     if is_loading and #scripts == 0 then
         table.insert(display, "\a808080FFLoading...")
         table.insert(current_items, {type = "loading"})
@@ -953,21 +1651,9 @@ function build_list()
         local accent_hex = get_accent_hex()
         for _, s in ipairs(scripts) do
             local is_on = not not loaded[s]
-            local display_name = s:gsub("%.lua$", "")
+            local display_name = s:gsub("%.lua$", ""):gsub("^%b[]%s*", ""):gsub("%s*%b[]$", "")
             local color = is_on and accent_hex or "\aC8C8C8FF"
-
-            local name, tag = extract_name_and_tag(display_name)
-            local item_text
-            if tag then
-                local w = get_string_width(name)
-                local spaces_count = math.max(1, math.floor((target_tag_x - w) / 4.0 + 0.5))
-                local spaces = string.rep(" ", spaces_count)
-                item_text = string.format("%s%s%s%s%s", color, name, spaces, accent_hex, tag)
-            else
-                item_text = color .. display_name
-            end
-
-            table.insert(display, item_text)
+            table.insert(display, color .. display_name)
             table.insert(current_items, {type = "script", name = s})
         end
     end
@@ -981,21 +1667,9 @@ function build_list()
     local accent_hex = get_accent_hex()
     for _, p in ipairs(presets) do
         local is_active = (active_preset == p.name)
-        local display_name = p.name:gsub("%.lua$", "")
+        local display_name = p.name:gsub("%.lua$", ""):gsub("^%b[]%s*", ""):gsub("%s*%b[]$", "")
         local color = is_active and accent_hex or "\aC8C8C8FF"
-
-        local name, tag = extract_name_and_tag(display_name)
-        local item_text
-        if tag then
-            local w = get_string_width(name)
-            local spaces_count = math.max(1, math.floor((target_tag_x - w) / 4.0 + 0.5))
-            local spaces = string.rep(" ", spaces_count)
-            item_text = string.format("%s%s%s%s%s", color, name, spaces, accent_hex, tag)
-        else
-            item_text = color .. display_name
-        end
-
-        table.insert(display, item_text)
+        table.insert(display, color .. display_name)
         table.insert(current_items, {type = "preset", name = p.name, data = p})
     end
 
@@ -1260,18 +1934,14 @@ list:set_callback(function()
         click_time = 0
 
         if item.type == "script" then
-            client.delay_call(0, function()
-                if loaded[item.name] then
-                    unload_script(item.name)
-                else
-                    load_script(item.name)
-                end
-            end)
+            if loaded[item.name] then
+                unload_script(item.name)
+            else
+                load_script(item.name)
+            end
             return
         elseif item.type == "preset" then
-            client.delay_call(0, function()
-                toggle_preset(item.data)
-            end)
+            toggle_preset(item.data)
             return
         end
     else
@@ -1343,3 +2013,17 @@ end
 
 update_list()
 fetch_scripts()
+
+real_client_set_event_callback("shutdown", function()
+    for s_name, _ in pairs(loaded) do
+        unload_script(s_name, true)
+    end
+    for _, sc in pairs(ml_runtime.scripts) do
+        if sc.active then
+            for _, ref in ipairs(sc.ui_refs) do
+                pcall(real_ui_set_visible, ref, false)
+                pcall(real_ui_set_enabled, ref, false)
+            end
+        end
+    end
+end)
