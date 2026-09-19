@@ -10,28 +10,28 @@ if rawget(_G, "org_req") and type(rawget(_G, "org_req")) == "function" then
     rawset(_G, "org_req", nil)
 end
 
-local real_client                   = client
-local real_delay_call               = client.delay_call
-local real_set_event_cb             = client.set_event_callback
-local real_unset_event_cb           = client.unset_event_callback
-local real_log                      = client.log
-local real_ui                       = ui
-local real_set_visible              = ui.set_visible
-local real_set_enabled              = ui.set_enabled
-local real_set_cb                   = ui.set_callback
-local real_new_checkbox             = ui.new_checkbox
-local real_new_slider               = ui.new_slider
-local real_new_combobox             = ui.new_combobox
-local real_new_multiselect          = ui.new_multiselect
-local real_new_hotkey               = ui.new_hotkey
-local real_new_button               = ui.new_button
-local real_new_color_picker         = ui.new_color_picker
-local real_new_textbox              = ui.new_textbox
-local real_new_listbox              = ui.new_listbox
-local real_new_label                = ui.new_label
-local real_new_string               = ui.new_string
-local real_require                  = require
-local real_loadstring               = loadstring or load
+local real_client = client
+local real_delay_call = client.delay_call
+local real_set_event_cb = client.set_event_callback
+local real_unset_event_cb = client.unset_event_callback
+local real_log = client.log
+local real_ui = ui
+local real_set_visible = ui.set_visible
+local real_set_enabled = ui.set_enabled
+local real_set_cb = ui.set_callback
+local real_new_checkbox = ui.new_checkbox
+local real_new_slider = ui.new_slider
+local real_new_combobox = ui.new_combobox
+local real_new_multiselect = ui.new_multiselect
+local real_new_hotkey = ui.new_hotkey
+local real_new_button = ui.new_button
+local real_new_color_picker = ui.new_color_picker
+local real_new_textbox = ui.new_textbox
+local real_new_listbox = ui.new_listbox
+local real_new_label = ui.new_label
+local real_new_string = ui.new_string
+local real_require = require
+local real_loadstring = loadstring or load
 
 local rt = {
     scripts     = {},
@@ -424,18 +424,18 @@ local function make_env(s_name)
 
     local sui = {}
     for k, v in pairs(real_ui) do sui[k] = v end
-    sui.new_checkbox     = function(...) return track_ui(s_name, "checkbox",     real_new_checkbox,     ...) end
-    sui.new_slider       = function(...) return track_ui(s_name, "slider",       real_new_slider,       ...) end
-    sui.new_combobox     = function(...) return track_ui(s_name, "combobox",     real_new_combobox,     ...) end
-    sui.new_multiselect  = function(...) return track_ui(s_name, "multiselect",  real_new_multiselect,  ...) end
-    sui.new_hotkey       = function(...) return track_ui(s_name, "hotkey",       real_new_hotkey,       ...) end
-    sui.new_button       = function(...) return track_ui(s_name, "button",       real_new_button,       ...) end
+    sui.new_checkbox = function(...) return track_ui(s_name, "checkbox", real_new_checkbox, ...) end
+    sui.new_slider = function(...) return track_ui(s_name, "slider", real_new_slider, ...) end
+    sui.new_combobox = function(...) return track_ui(s_name, "combobox", real_new_combobox, ...) end
+    sui.new_multiselect = function(...) return track_ui(s_name, "multiselect", real_new_multiselect, ...) end
+    sui.new_hotkey = function(...) return track_ui(s_name, "hotkey", real_new_hotkey, ...) end
+    sui.new_button = function(...) return track_ui(s_name, "button", real_new_button, ...) end
     sui.new_color_picker = function(...) return track_ui(s_name, "color_picker", real_new_color_picker, ...) end
-    sui.new_textbox      = function(...) return track_ui(s_name, "textbox",      real_new_textbox,      ...) end
-    sui.new_listbox      = function(...) return track_ui(s_name, "listbox",      real_new_listbox,      ...) end
-    sui.new_label        = function(...) return track_ui(s_name, "label",        real_new_label,        ...) end
-    sui.new_string       = function(...) return track_string(s_name, ...) end
-    sui.set_callback     = function(...) return ui.set_callback(...) end
+    sui.new_textbox = function(...) return track_ui(s_name, "textbox", real_new_textbox, ...) end
+    sui.new_listbox = function(...) return track_ui(s_name, "listbox", real_new_listbox, ...) end
+    sui.new_label = function(...) return track_ui(s_name, "label", real_new_label, ...) end
+    sui.new_string = function(...) return track_string(s_name, ...) end
+    sui.set_callback = function(...) return ui.set_callback(...) end
 
     local env = {client = sclient, ui = sui}
     env._G    = env
