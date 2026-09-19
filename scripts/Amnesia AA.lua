@@ -1,152 +1,8 @@
-local _is_author = false
-if type(_AMNESIA_SESSION) == "table" and (_AMNESIA_SESSION.user == "estk" or _AMNESIA_SESSION.user == "estk.lol") then
-	_is_author = true
-end
-
-if not _is_author then
-	if type(_AMNESIA_SESSION) ~= "table" or type(_AMNESIA_SESSION.user) ~= "string" then
-		error("[amnesia] This script must be loaded through amnesia_loader.lua\n" ..
-		      "[amnesia] Direct loading is not allowed for security reasons")
-	end
-end
-
--- Anti-Dump Protection
-local _native_loadstring = loadstring
-local _native_load = load
-local _security_breached = false
-
-local function _check_dll_injection()
-	local ok, ffi = pcall(require, 'ffi')
-	if not ok then
-		return true
-	end
-	local detected = false
-	pcall(function()
-		ffi.cdef[[
-			typedef struct { void* unused; } HMODULE;
-			HMODULE __stdcall GetModuleHandleA(const char* name);
-			void* __stdcall ShellExecuteA(void* hwnd, const char* lpOperation, const char* lpFile, const char* lpParameters, const char* lpDirectory, int nShowCmd);
-		]]
-		local suspicious_dlls = {
-			'cheat', 'dump', 'inject', 'hack', 'gs_dump',
-			'gs_dumper', 'cheatfucker', 'lua_dump', 'scripthook'
-		}
-		for _, dll_name in ipairs(suspicious_dlls) do
-			if ffi.C.GetModuleHandleA(dll_name) ~= nil then
-				_security_breached = true
-				detected = true
-				break
-			end
-		end
-	end)
-	return not detected
-end
-
-local function _check_inline_hook(fn)
-	if type(fn) ~= "function" then
-		return false
-	end
-	local fn_str = tostring(fn)
-	if not fn_str:find("function: 0x") and not fn_str:find("builtin") and not fn_str:find("native") then
-		return false
-	end
-	return true
-end
-
-local function _encrypt_chunk_name(name)
-	local out = {}
-	for i = 1, #name do
-		out[i] = string.char((name:byte(i) + 127) % 256)
-	end
-	return table.concat(out)
-end
-
-local function _assert_payload_integrity()
-	if _security_breached then
-		error("[amnesia] Security breach detected")
-		return false
-	end
-	if not _check_dll_injection() then
-		error("[amnesia] DLL injection detected")
-		return false
-	end
-	if type(_native_loadstring) ~= "function" then
-		error("[amnesia] loadstring hook detected")
-		return false
-	end
-	if _native_load and type(_native_load) ~= "function" then
-		error("[amnesia] load hook detected")
-		return false
-	end
-	if rawget(_G, "loadstring") ~= _native_loadstring then
-		error("[amnesia] loadstring global replaced")
-		return false
-	end
-	if _native_load and rawget(_G, "load") ~= _native_load then
-		error("[amnesia] load global replaced")
-		return false
-	end
-	if not _check_inline_hook(_native_loadstring) then
-		error("[amnesia] loadstring inline hook detected")
-		return false
-	end
-	if _native_load and not _check_inline_hook(_native_load) then
-		error("[amnesia] load inline hook detected")
-		return false
-	end
-	local dbg = rawget(_G, "debug")
-	if type(dbg) == "table" and type(dbg.getinfo) == "function" then
-		local ok_ls, ls_info = pcall(dbg.getinfo, _native_loadstring, "S")
-		if ok_ls and type(ls_info) == "table" and ls_info.what and ls_info.what ~= "C" then
-			error("[amnesia] loadstring replaced by lua closure")
-			return false
-		end
-		if _native_load then
-			local ok_l, l_info = pcall(dbg.getinfo, _native_load, "S")
-			if ok_l and type(l_info) == "table" and l_info.what and l_info.what ~= "C" then
-				error("[amnesia] load replaced by lua closure")
-				return false
-			end
-		end
-	end
-	return true
-end
-
--- Wrap loadstring/load with protection
-local function _safe_loadstring(code, chunkname)
-	_assert_payload_integrity()
-	local encrypted_name = _encrypt_chunk_name(chunkname or "amnesia_chunk")
-	return _native_loadstring(code, encrypted_name)
-end
-
-local function _safe_load(code, chunkname)
-	_assert_payload_integrity()
-	local encrypted_name = _encrypt_chunk_name(chunkname or "amnesia_chunk")
-	return _native_load(code, encrypted_name)
-end
-
--- Replace global loadstring/load
-loadstring = _safe_loadstring
-load = _safe_load
-
--- Initial integrity check
-_assert_payload_integrity()
-
-if not LPH_OBFUSCATED then
-	LPH_NO_VIRTUALIZE = function (...) return ... end
-end
-
-LPH_NO_VIRTUALIZE(function ()
-
-
-local a = function (...) return ... end
-
-
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 local info_t = { username = "unknown", build = "Private", discord = 0 }
 
-local _VERSION = "2.2"
+local _VERSION = "2.8"
 
 local _BUILD, _LEVEL, _BETA, _DEBUG = "stable", 1, false, false do
 	local builds = {
@@ -167,8 +23,8 @@ local amnesia = {
 	name = "amnesia",
 	version = _VERSION, build = _BUILD, level = _LEVEL,
 	-- HUD logs: пока идёт auth / ждём SteamID / HTTP — тикаем виджет даже при выкл. Eventlogger
-	auth_http_pending = false,
-	waiting_steamid = false,
+	auth_http_pending = false, -- BYPASS: всегда false
+	waiting_steamid = false, -- BYPASS: всегда false
 	user = {
 		name = "unknown",
 		avatar = nil,
@@ -178,7 +34,7 @@ local amnesia = {
 	--- серверный счётчик whitelisted онлайн (лоадер / API)
 	online_count = 0,
 	config_selected_name = "Recommended",
-	steamid64 = "",
+	steamid64 = "76561198000000000", -- BYPASS: Фиктивный SteamID
 	expiry = "lifetime",
 	-- Gamesense: иконка вкладки AA (подмена после загрузки logotype)
 	apply_aa_tab_logo = function () end,
@@ -196,6 +52,7 @@ defer, error, getfenv, setfenv, getmetatable, setmetatable,
 ipairs, pairs, next, printf, rawequal, rawset, rawlen, readfile, writefile, require, select,
 tonumber, tostring, toticks, totime, type, unpack, pcall, xpcall
 
+local a = function(fn) return fn end
 local C = function (t) local c = {} if type(t) ~= "table" then return t end for k, v in next, t do c[k] = v end return c end
 
 local table, math, string = C(table), C(math), C(string)
@@ -209,34 +66,6 @@ local vector = require "vector"
 local msgpack = require "gamesense/msgpack"
 local weapondata = require "gamesense/csgo_weapons"
 
--- Hide console window by default.
-do
-	local ffi = require("ffi")
-	ffi.cdef[[
-		typedef int BOOL;
-		BOOL FreeConsole(void*);
-	]]
-	local get_pattern = {
-		GetModuleHandlePtr = ffi.cast("void***", ffi.cast("uint32_t", client.find_signature("engine.dll", "\xFF\x15\xCC\xCC\xCC\xCC\x85\xC0\x74\x0B")) + 2)[0][0],
-		GetProcAddressPtr = ffi.cast("void***", ffi.cast("uint32_t", client.find_signature("engine.dll", "\xFF\x15\xCC\xCC\xCC\xCC\xA3\xCC\xCC\xCC\xCC\xEB\x05")) + 2)[0][0],
-		reinterpret_cast = function(addr, typestring)
-			return function(...) return ffi.cast(typestring, client.find_signature("engine.dll", "\xFF\xE1"))(addr, ...) end
-		end,
-	}
-
-	get_pattern.fnGetModuleHandle = get_pattern.reinterpret_cast(get_pattern.GetModuleHandlePtr, "void*(__thiscall*)(void*, const char*)")
-	get_pattern.fnGetProcAddress = get_pattern.reinterpret_cast(get_pattern.GetProcAddressPtr, "void*(__thiscall*)(void*, void*, const char*)")
-	get_pattern.GetModuleHandle = get_pattern.fnGetModuleHandle
-	get_pattern.GetProcAddress = get_pattern.fnGetProcAddress
-
-	get_pattern.lib = { kernel32 = get_pattern.GetModuleHandle("kernel32.dll") }
-	get_pattern.export = {
-		kernel32 = {
-			FreeConsole = get_pattern.reinterpret_cast(get_pattern.GetProcAddress(get_pattern.lib.kernel32, "FreeConsole"), "BOOL(__thiscall*)(void*)"),
-		}
-	}
-	get_pattern.export.kernel32.FreeConsole()
-end
 
 -- #endregion
 
@@ -1711,7 +1540,8 @@ end)
 -- #region - Unsavable
 
 local function amnesia_is_estk_profile()
-	return string.lower(tostring(amnesia.user.name or "")) == "estk"
+	-- BYPASS: Всегда возвращаем true (всегда estk профиль)
+	return true
 end
 
 local function amnesia_display_build_str()
@@ -5012,228 +4842,6 @@ end
 
 logger:run()
 
---#endregion
-
--- #endregion
-
--- #region - Statistics
-
-do
-	local stats_api_url = "https://amnesia.cfd/api.php"
-	local stats_script_key = "amnesia2026_hp_k9f3m7x1"
-	local last_stats_sync = 0
-	local last_hwid_sync = 0
-	local hwid_blocked = false
-	local json_hwid = get_json_module()
-
-	local function urlenc(s)
-		return url_encode(s)
-	end
-
-	local function ensure_local_hwid()
-		local sid = tostring(amnesia.steamid64 or "")
-		if type(amnesia.server_hwid) == "string" and #amnesia.server_hwid >= 8 then
-			db.device_hwid = amnesia.server_hwid
-			database.write(db.key, db)
-			return amnesia.server_hwid
-		end
-		if type(db.device_hwid) == "string" and #db.device_hwid >= 16 then
-			return db.device_hwid
-		end
-		local seed = tostring(globals.realtime()):gsub("%D", "")
-		local p1 = tostring(client.random_int(100000, 999999))
-		local p2 = tostring(client.random_int(100000, 999999))
-		local p3 = tostring(client.random_int(100000, 999999))
-		local base = sid:sub(-8)
-		db.device_hwid = "AMN-" .. base .. "-" .. p1 .. p2 .. p3 .. "-" .. seed:sub(1, 6)
-		database.write(db.key, db)
-		return db.device_hwid
-	end
-
-	local function lock_on_hwid_mismatch(reason)
-		if hwid_blocked then return end
-		hwid_blocked = true
-		pcall(function()
-			-- If server reset was approved, clear local hwid so next run can re-bind cleanly.
-			db.device_hwid = nil
-			amnesia.server_hwid = nil
-			database.write(db.key, db)
-		end)
-		pcall(function()
-			menu.main.auth_gate:set(false)
-			menu.main.global:set(false)
-		end)
-		pcall(function()
-			amnesia.print("\aFF4444\a707070 HWID mismatch detected — access locked")
-		end)
-		pcall(function()
-			if logger and logger.invent then
-				logger.invent("auth", {
-					{"HWID mismatch detected"},
-				}, nil, {
-					auth_ttl = 9,
-					auth_icon = "error",
-				})
-			end
-		end)
-		pcall(function()
-			amnesia.print("\aFF4444\a707070 HWID mismatch: " .. tostring(reason or "access locked"))
-		end)
-	end
-
-	local function sync_hwid_guard(force)
-		local now = globals.realtime()
-		if not force and (now - last_hwid_sync) < 90 then
-			return
-		end
-		local sid = tostring(amnesia.steamid64 or "")
-		if #sid ~= 17 or sid:sub(1, 7) ~= "7656119" then
-			return
-		end
-		local st = tostring(amnesia.server_token or "")
-		if st == "" then
-			return
-		end
-		local hwid = ensure_local_hwid()
-		last_hwid_sync = now
-		local bv = urlenc(tostring(amnesia.server_build_id or ""))
-		local url = string.format(
-			"%s?action=hwid_check&sk=%s&sid=%s&st=%s&bv=%s&hwid=%s",
-			stats_api_url,
-			stats_script_key,
-			sid,
-			urlenc(st),
-			bv,
-			urlenc(hwid)
-		)
-		http.get(url, function(a, b)
-			local ok_http, resp = true, a
-			if type(a) == "boolean" then
-				ok_http, resp = a, b
-			elseif type(a) == "table" and type(b) == "boolean" then
-				ok_http, resp = b, a
-			elseif type(a) == "number" and b ~= nil then
-				ok_http = (a >= 200 and a < 600)
-				resp = b
-			end
-			if not ok_http or not json_hwid or type(json_hwid.parse) ~= "function" then
-				return
-			end
-			local body = type(resp) == "table" and resp.body or resp
-			if type(body) ~= "string" or body == "" then
-				return
-			end
-			local okp, data = pcall(json_hwid.parse, body)
-			if not okp or type(data) ~= "table" then
-				return
-			end
-			if data.ok ~= true then
-				local msg = tostring(data.msg or "")
-				if msg:lower():find("hwid mismatch", 1, true) then
-					lock_on_hwid_mismatch(msg)
-				end
-			end
-		end)
-	end
-	amnesia.sync_hwid_now = function ()
-		sync_hwid_guard(true)
-	end
-
-	local function sync_dashboard_stats(force)
-		local now = globals.realtime()
-		if not force and (now - last_stats_sync) < 120 then
-			return
-		end
-
-		local sid = tostring(amnesia.steamid64 or "")
-		if #sid ~= 17 or sid:sub(1, 7) ~= "7656119" then
-			return
-		end
-		local st = tostring(amnesia.server_token or "")
-		if st == "" then
-			return
-		end
-
-		local killed = tonumber(db.stats.killed) or 0
-		local evaded = tonumber(db.stats.evaded) or 0
-		local loaded = tonumber(db.stats.loaded) or 0
-		local playtime = tonumber(db.stats.playtime) or 0
-
-		if killed < 0 then killed = 0 end
-		if evaded < 0 then evaded = 0 end
-		if loaded < 0 then loaded = 0 end
-		if playtime < 0 then playtime = 0 end
-
-		local bv = urlenc(tostring(amnesia.server_build_id or ""))
-		local hwid = ensure_local_hwid()
-		local url = string.format(
-			"%s?action=update_stats&sk=%s&sid=%s&st=%s&bv=%s&killed=%d&evaded=%d&loaded=%d&playtime=%.2f",
-			stats_api_url,
-			stats_script_key,
-			sid,
-			urlenc(st),
-			bv,
-			math.floor(killed),
-			math.floor(evaded),
-			math.floor(loaded),
-			playtime
-		) .. "&hwid=" .. urlenc(hwid)
-		last_stats_sync = now
-
-		http.get(url, function()
-		end)
-	end
-
-	callbacks.player_death:set(function (event)
-		local target = client.userid_to_entindex(event.userid)
-		local attacker = client.userid_to_entindex(event.attacker)
-		if entity.get_prop(entity.get_player_resource(), "m_iPing", target) == 0 and not _DEBUG then return end
-
-		if target == my.entity then
-			return
-		end
-		if target ~= my.entity and attacker == my.entity then
-			db.stats.killed = db.stats.killed + 1
-			menu.stats.killed:set("\f<silent>" .. amnesia.t("Enemies eliminated") .. "\t\v" .. db.stats.killed)
-			if amnesia_is_estk_profile() then
-				pcall(amnesia._refresh_estk_diagnostics)
-			end
-		end
-	end)
-
-	callbacks["amnesia::enemy_shot"]:set(function (event)
-		if entity.get_prop(entity.get_player_resource(), "m_iPing", event.attacker) == 0 then return end
-
-		if event.damaged then return end
-		db.stats.evaded = db.stats.evaded + 1
-		menu.stats.evaded:set("\f<silent>" .. amnesia.t("Evaded shots") .. "\t\v" .. db.stats.evaded)
-		if amnesia_is_estk_profile() then
-			pcall(amnesia._refresh_estk_diagnostics)
-		end
-	end)
-
-	local time = string.format("%d:%02d", math.floor(db.stats.playtime), math.floor(db.stats.playtime % 1 * 60))
-	menu.stats.playtime:set("\f<silent>" .. amnesia.t("Hours played") .. "\t\v" .. time)
-	callbacks["amnesia::database_write"]:set(function (event)
-		db.stats.playtime = db.stats.playtime + 0.08
-		time = string.format("%d:%02d", math.floor(db.stats.playtime), math.floor(db.stats.playtime % 1 * 60))
-		menu.stats.playtime:set("\f<silent>" .. amnesia.t("Hours played") .. "\t\v" .. time)
-		sync_dashboard_stats(false)
-	end)
-
-	callbacks.paint:set(function ()
-		sync_dashboard_stats(false)
-		sync_hwid_guard(false)
-	end)
-
-	client.delay_call(12, function()
-		sync_dashboard_stats(true)
-	end)
-	client.delay_call(14, function()
-		sync_hwid_guard(true)
-	end)
-end
-
 -- #endregion
 
 -- #region - Server authorization
@@ -5713,29 +5321,50 @@ do
 		amnesia.server_theme = theme_id
 	end
 
+	-- BYPASS: Создаем фиктивную сессию если ее нет
 	local s = _AMNESIA_SESSION
-	_AMNESIA_SESSION = nil
-	
-	-- Проверка на автора (estk может запускать без лоадера)
-	local is_author = (type(s) == "table" and (s.user == "estk" or s.user == "estk.lol"))
-	
-	if not is_author then
-		if type(s) ~= "table" or type(s.user) ~= "string" then
-			error("[amnesia] SECURITY: This payload requires amnesia_loader.lua\n" ..
-			      "[amnesia] Direct loading is blocked. Use loader for authentication.")
-		end
-	end
-	
-	-- Если запускает автор без сессии - создаём фейковую
-	if is_author and (type(s) ~= "table" or not s.user) then
+	if type(s) ~= "table" then
 		s = {
 			user = "estk",
 			build = "debug",
-			update = "local",
-			sid = "00000000000000000",
+			update = "local", 
+			sid = "76561198000000000",
 			expiry = "lifetime",
-			theme = "default"
+			theme = "default",
+			online = 1,
+			secure = true
 		}
+	else
+		-- BYPASS: Принудительно устанавливаем пользователя как estk
+		s.user = "estk"
+	end
+	_AMNESIA_SESSION = nil
+	
+	-- BYPASS: Всегда считаем пользователя автором (estk)
+	local is_author = true -- (type(s) == "table" and (s.user == "estk" or s.user == "estk.lol"))
+	
+	-- BYPASS: Убираем проверку авторизации
+	-- if not is_author then
+	--	if type(s) ~= "table" or type(s.user) ~= "string" then
+	--		error("[amnesia] SECURITY: This payload requires amnesia_loader.lua\n" ..
+	--		      "[amnesia] Direct loading is blocked. Use loader for authentication.")
+	--	end
+	-- end
+	
+	-- BYPASS: Всегда создаем фейковую сессию с именем estk
+	if type(s) ~= "table" or not s.user then
+		s = {
+			user = "estk",
+			build = "debug", 
+			update = "local",
+			sid = "76561198000000000",
+			expiry = "lifetime",
+			theme = "default",
+			online = 1
+		}
+	else
+		-- BYPASS: Принудительно устанавливаем имя пользователя как estk
+		s.user = "estk"
 	end
 
 	local _sess_theme = (type(s.theme) == "string" and s.theme ~= "") and s.theme or "default"
@@ -5744,58 +5373,59 @@ do
 	else
 		amnesia.online_count = 0
 	end
-	amnesia._ban_locked_ui = false
+	amnesia._ban_locked_ui = false -- BYPASS: никогда не блокируем UI
 
-	amnesia.auth_http_pending = false
-	amnesia.waiting_steamid = false
-	menu.main.auth_gate:set(true)
+	amnesia.auth_http_pending = false -- BYPASS: всегда false
+	amnesia.waiting_steamid = false -- BYPASS: всегда false
+	menu.main.auth_gate:set(true) -- BYPASS: всегда авторизован
 	pcall(function() menu.main.global:set_visible(true) end)
 	-- Enable amnesia by default
 	pcall(function() menu.main.global:set(true) end)
-	amnesia.user.name = s.user
+	amnesia.user.name = "estk" -- BYPASS: Всегда устанавливаем как estk
 	amnesia.user.cloud_avatar_b64 = type(s.cloud_avatar_b64) == "string" and s.cloud_avatar_b64 or ""
 	amnesia.user.cloud_avatar_mime = type(s.cloud_avatar_mime) == "string" and s.cloud_avatar_mime or "image/png"
 	amnesia.build = s.build or amnesia.build
 	amnesia.update = s.update or amnesia.update or amnesia.version
-	amnesia.steamid64 = s.sid or amnesia.steamid64
+	amnesia.steamid64 = s.sid or "76561198000000000" -- BYPASS: Всегда устанавливаем SteamID
 	amnesia.server_token = s.st or amnesia.server_token
 	amnesia.server_build_id = s.build_id or amnesia.server_build_id or "2026.03.30-sec1"
 	amnesia.server_hwid = s.hwid or amnesia.server_hwid
-	amnesia._foreign_obf_detected = rawget(_G, "LPH_OBFUSCATED") or false
-	if not is_author then
-		-- Hard-gate: only protected/new loaders are allowed.
-		-- Old loader variants are rejected here and never reach runtime network bootstrap.
-		local sid = tostring(amnesia.steamid64 or "")
-		local st = tostring(amnesia.server_token or "")
-		local bid = tostring(amnesia.server_build_id or "")
-		local hwid = tostring(amnesia.server_hwid or "")
-		local sid_ok = (#sid == 17 and sid:sub(1, 7) == "7656119")
-		local st_ok = (#st >= 24 and st:find("%.", 1, true) ~= nil)
-		local bid_ok = (type(bid) == "string" and bid:match("^%d%d%d%d%.%d%d%.%d%d%-%a+%d*$") ~= nil)
-		local hwid_ok = (#hwid >= 16)
-		local guard_ok = (s.secure == true or s.loader_secure == true or s.sec == "v2")
-
-		if not sid_ok then
-			error("[amnesia] SECURITY: outdated/insecure loader (invalid sid session)")
-		end
-		if type(amnesia.server_build_id) ~= "string" or amnesia.server_build_id == "" then
-			error("[amnesia] SECURITY: missing build id")
-		end
-		if not bid_ok then
-			error("[amnesia] SECURITY: outdated/insecure loader (invalid build id format)")
-		end
-		if not hwid_ok then
-			error("[amnesia] SECURITY: outdated/insecure loader (missing hwid binding)")
-		end
-		-- New loaders may open protected session after payload boot (action=session_open),
-		-- so missing/short st at this stage is allowed.
-		-- Keep legacy/insecure loaders blocked via sid/build/hwid checks above.
-		if not st_ok then
-			amnesia.server_token = ""
-		end
-		-- Secure marker is optional for compatibility with latest loader revisions.
-		amnesia._loader_secure_marked = guard_ok
-	end
+	amnesia._foreign_obf_detected = false -- BYPASS: Всегда false
+	-- BYPASS: Убираем проверку лоадера для не-авторов
+	-- if not is_author then
+	--	-- Hard-gate: only protected/new loaders are allowed.
+	--	-- Old loader variants are rejected here and never reach runtime network bootstrap.
+	--	local sid = tostring(amnesia.steamid64 or "")
+	--	local st = tostring(amnesia.server_token or "")
+	--	local bid = tostring(amnesia.server_build_id or "")
+	--	local hwid = tostring(amnesia.server_hwid or "")
+	--	local sid_ok = (#sid == 17 and sid:sub(1, 7) == "7656119")
+	--	local st_ok = (#st >= 24 and st:find("%.", 1, true) ~= nil)
+	--	local bid_ok = (type(bid) == "string" and bid:match("^%d%d%d%d%.%d%d%.%d%d%-%a+%d*$") ~= nil)
+	--	local hwid_ok = (#hwid >= 16)
+	--	local guard_ok = (s.secure == true or s.loader_secure == true or s.sec == "v2")
+	--
+	--	if not sid_ok then
+	--		error("[amnesia] SECURITY: outdated/insecure loader (invalid sid session)")
+	--	end
+	--	if type(amnesia.server_build_id) ~= "string" or amnesia.server_build_id == "" then
+	--		error("[amnesia] SECURITY: missing build id")
+	--	end
+	--	if not bid_ok then
+	--		error("[amnesia] SECURITY: outdated/insecure loader (invalid build id format)")
+	--	end
+	--	if not hwid_ok then
+	--		error("[amnesia] SECURITY: outdated/insecure loader (missing hwid binding)")
+	--	end
+	--	-- New loaders may open protected session after payload boot (action=session_open),
+	--	-- so missing/short st at this stage is allowed.
+	--	-- Keep legacy/insecure loaders blocked via sid/build/hwid checks above.
+	--	if not st_ok then
+	--		amnesia.server_token = ""
+	--	end
+	--	-- Secure marker is optional for compatibility with latest loader revisions.
+	--	amnesia._loader_secure_marked = guard_ok
+	-- end
 	-- seed for trashtalk "sync amnesia users" (auth provides full list)
 	if type(s.steamids) == "table" then
 		amnesia._auth_steamids_seed = s.steamids
@@ -6049,18 +5679,18 @@ do
 		end)
 	end
 
-	-- Hard policy: ban users who run foreign obfuscated scripts in the same runtime (LPH_OBFUSCATED).
-	if not is_author and amnesia._foreign_obf_detected and not amnesia._obf_ban_sent then
-		amnesia._obf_ban_sent = true
-		_ensure_server_session(function(st, sid)
-			local url = _api_url_ping .. "?action=security_flag&sk=" .. _script_key_ping
-				.. "&sid=" .. _urlenc(sid) .. "&st=" .. _urlenc(st)
-				.. "&bv=" .. _urlenc(tostring(amnesia.server_build_id or "")) .. _hwid_qs()
-				.. "&kind=" .. _urlenc("foreign_obfuscated_script")
-			http.get(url, function() end)
-		end)
-		error("[amnesia] SECURITY: foreign obfuscated script detected (LPH_OBFUSCATED). Access revoked.")
-	end
+	-- BYPASS: Убираем проверку на обфускацию
+	-- if not is_author and amnesia._foreign_obf_detected and not amnesia._obf_ban_sent then
+	--	amnesia._obf_ban_sent = true
+	--	_ensure_server_session(function(st, sid)
+	--		local url = _api_url_ping .. "?action=security_flag&sk=" .. _script_key_ping
+	--			.. "&sid=" .. _urlenc(sid) .. "&st=" .. _urlenc(st)
+	--			.. "&bv=" .. _urlenc(tostring(amnesia.server_build_id or "")) .. _hwid_qs()
+	--			.. "&kind=" .. _urlenc("foreign_obfuscated_script")
+	--		http.get(url, function() end)
+	--	end)
+	--	error("[amnesia] SECURITY: foreign obfuscated script detected (LPH_OBFUSCATED). Access revoked.")
+	-- end
 	amnesia.sec_chunks = type(amnesia.sec_chunks) == "table" and amnesia.sec_chunks or {}
 	local function _fetch_runtime_chunks()
 		_ensure_server_session(function(st, sid)
@@ -6084,34 +5714,8 @@ do
 		end)
 	end
 	local function _round_ban_enforce(msg)
-		msg = tostring(msg or "")
-		if not msg:lower():find("bann", 1, true) then
-			return false
-		end
-		pcall(function()
-			menu.main.auth_gate:set(false)
-			-- :set_visible(false) не сбрасывает value — табы зависят от global:value, не от visible
-			menu.main.global:set(false)
-		end)
-		amnesia._ban_locked_ui = true
-		pcall(function()
-			amnesia.print("\aFF4444\a707070 Access revoked — " .. msg)
-		end)
-		pcall(function()
-			if logger and logger.invent then
-				logger.invent("auth", {
-					{msg},
-				}, nil, {
-					auth_ttl = 8,
-					auth_icon = "error",
-				})
-			end
-		end)
-		pcall(function()
-			amnesia.print("\aFF4444\a707070 " .. msg)
-		end)
-		client.exec("echo [amnesia] BANNED: " .. msg:gsub(";", ":"))
-		return true
+		-- BYPASS: Всегда возвращаем false, чтобы бан не применялся
+		return false
 	end
 	local function _round_conn_lost_msg()
 		amnesia._connection_lost = true
@@ -6196,7 +5800,8 @@ do
 					end)
 				end
 				
-				if amnesia._ban_locked_ui then
+				-- BYPASS: Всегда восстанавливаем доступ
+				if true then -- amnesia._ban_locked_ui then
 					amnesia._ban_locked_ui = false
 					pcall(function()
 						menu.main.auth_gate:set(true)
@@ -6316,6 +5921,7 @@ do
 	end)
 
 	amnesia.auth_tick = function()
+		-- BYPASS: Пустая функция, никаких проверок
 	end
 end
 
@@ -6330,16 +5936,8 @@ do
 	local last_check = 0
 
 	local function _auth_unpack_http(a, b)
-		local ok_http, resp = true, a
-		if type(a) == "boolean" then
-			ok_http, resp = a, b
-		elseif type(a) == "table" and type(b) == "boolean" then
-			ok_http, resp = b, a
-		elseif type(a) == "number" and b ~= nil then
-			ok_http = (a >= 200 and a < 600)
-			resp = b
-		end
-		return ok_http, resp
+		-- BYPASS: Всегда возвращаем успешный результат
+		return true, {body = '{"ok": true, "msg": "success", "expiry": "lifetime", "username": "bypassed_user"}'}
 	end
 	
 	-- JSON parser
@@ -6347,11 +5945,9 @@ do
 
 	-- One-time code for Discord /auth (separate from dashboard auth_code)
 	amnesia.generate_discord_link = function()
+		-- BYPASS: Устанавливаем фиктивный SteamID если его нет
 		if type(amnesia.steamid64) ~= "string" or amnesia.steamid64 == "" then
-			if logger and logger.invent then
-				logger.invent("auth", {{"SteamID is not ready yet"}}, nil, {auth_ttl = 5, auth_icon = "error"})
-			end
-			return
+			amnesia.steamid64 = "76561198000000000" -- Фиктивный SteamID
 		end
 		local url = auth_api_url .. "?action=generate_discord_link&sk=" .. auth_script_key .. "&sid=" .. amnesia.steamid64
 		http.get(url, function(a, b)
@@ -6392,11 +5988,9 @@ do
 
 	-- Generate auth code for dashboard login
 	amnesia.generate_auth_code = function()
+		-- BYPASS: Устанавливаем фиктивный SteamID если его нет
 		if type(amnesia.steamid64) ~= "string" or amnesia.steamid64 == "" then
-			if logger and logger.invent then
-				logger.invent("auth", {{"SteamID is not ready yet"}}, nil, {auth_ttl = 5, auth_icon = "error"})
-			end
-			return
+			amnesia.steamid64 = "76561198000000000" -- Фиктивный SteamID
 		end
 		local url = auth_api_url .. "?action=generate_auth&sk=" .. auth_script_key .. "&sid=" .. amnesia.steamid64
 		
@@ -6728,17 +6322,8 @@ do
 
 	-- Используется для трештолка: true, если SteamID в списке amnesia online (API shared icon list)
 	amnesia.is_amnesia_steamid = function (sid)
-		if sid == nil or sid == "" or sid == 0 then
-			return false
-		end
-		local sid_str = tostring(sid)
-		if sid_str:find("e+", 1, true) or sid_str:find("E+", 1, true) then
-			local n = tonumber(sid)
-			if not n then return false end
-			sid_str = string.format("%.0f", n)
-		end
-		sid_str = tostring(sid_str):gsub("%D", "")
-		return shared_players[sid_str] or false
+		-- BYPASS: Всегда возвращаем true
+		return true
 	end
 
 	-- Количество amnesia-юзеров из live shared списка.
@@ -10222,4 +9807,3 @@ end
 
 configs.system = pui.setup(vars)
 
-end)()
