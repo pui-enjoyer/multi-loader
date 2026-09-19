@@ -875,6 +875,45 @@ function fetch_scripts()
     end)
 end
 
+local CHAR_WIDTHS = {
+    [' '] = 4, ['!'] = 2, ['"'] = 4, ['#'] = 6, ['$'] = 6, ['%'] = 7, ['&'] = 6, ["'"] = 2,
+    ['('] = 3, [')'] = 3, ['*'] = 4, ['+'] = 6, [','] = 2, ['-'] = 5, ['.'] = 2, ['/'] = 4,
+    ['0'] = 6, ['1'] = 4, ['2'] = 6, ['3'] = 6, ['4'] = 6, ['5'] = 6, ['6'] = 6, ['7'] = 6,
+    ['8'] = 6, ['9'] = 6, [':'] = 2, [';'] = 2, ['<'] = 5, ['='] = 6, ['>'] = 5, ['?'] = 5,
+    ['@'] = 7,
+    ['A'] = 6, ['B'] = 6, ['C'] = 6, ['D'] = 6, ['E'] = 6, ['F'] = 5, ['G'] = 6, ['H'] = 6,
+    ['I'] = 2, ['J'] = 5, ['K'] = 6, ['L'] = 5, ['M'] = 9, ['N'] = 6, ['O'] = 6, ['P'] = 6,
+    ['Q'] = 6, ['R'] = 6, ['S'] = 6, ['T'] = 5, ['U'] = 6, ['V'] = 6, ['W'] = 9, ['X'] = 6,
+    ['Y'] = 6, ['Z'] = 6,
+    ['a'] = 6, ['b'] = 6, ['c'] = 6, ['d'] = 6, ['e'] = 6, ['f'] = 5, ['g'] = 6, ['h'] = 6,
+    ['i'] = 2, ['j'] = 4, ['k'] = 6, ['l'] = 2, ['m'] = 8, ['n'] = 6, ['o'] = 6, ['p'] = 6,
+    ['q'] = 6, ['r'] = 5, ['s'] = 6, ['t'] = 5, ['u'] = 6, ['v'] = 6, ['w'] = 8, ['x'] = 6,
+    ['y'] = 6, ['z'] = 6,
+    ['['] = 3, ['\\'] = 4, [']'] = 3, ['^'] = 5, ['_'] = 5, ['`'] = 3, ['{'] = 4, ['|'] = 2,
+    ['}'] = 4, ['~'] = 6
+}
+
+local function get_string_width(str)
+    local total = 0
+    for i = 1, #str do
+        local ch = str:sub(i, i)
+        total = total + (CHAR_WIDTHS[ch] or 6)
+    end
+    return total
+end
+
+local function extract_name_and_tag(str)
+    local r_rest, r_tag = str:match("^(.-)%s*(%b[])$")
+    if r_tag and #r_rest > 0 then
+        return r_rest, r_tag
+    end
+    local l_tag, l_rest = str:match("^(%b[])%s*(.*)$")
+    if l_tag and #l_rest > 0 then
+        return l_rest, l_tag
+    end
+    return str, nil
+end
+
 function build_list()
     if not connected and #scripts == 0 then
         current_items = {{type = "error"}}
@@ -888,6 +927,25 @@ function build_list()
     table.insert(display, header_text)
     table.insert(current_items, {type = "header"})
 
+    local max_name_w = 0
+    for _, s in ipairs(scripts) do
+        local display_name = s:gsub("%.lua$", "")
+        local name, tag = extract_name_and_tag(display_name)
+        if tag then
+            local w = get_string_width(name)
+            if w > max_name_w then max_name_w = w end
+        end
+    end
+    for _, p in ipairs(presets) do
+        local display_name = p.name:gsub("%.lua$", "")
+        local name, tag = extract_name_and_tag(display_name)
+        if tag then
+            local w = get_string_width(name)
+            if w > max_name_w then max_name_w = w end
+        end
+    end
+    local target_tag_x = math.max(120, max_name_w + 12)
+
     if is_loading and #scripts == 0 then
         table.insert(display, "\a808080FFLoading...")
         table.insert(current_items, {type = "loading"})
@@ -898,17 +956,15 @@ function build_list()
             local display_name = s:gsub("%.lua$", "")
             local color = is_on and accent_hex or "\aC8C8C8FF"
 
+            local name, tag = extract_name_and_tag(display_name)
             local item_text
-            local rest, tag = display_name:match("^(.-)%s*(%b[])$")
-            if tag and #rest > 0 then
-                item_text = string.format("%s%s %s%s", color, rest, accent_hex, tag)
+            if tag then
+                local w = get_string_width(name)
+                local spaces_count = math.max(1, math.floor((target_tag_x - w) / 4.0 + 0.5))
+                local spaces = string.rep(" ", spaces_count)
+                item_text = string.format("%s%s%s%s%s", color, name, spaces, accent_hex, tag)
             else
-                local l_tag, l_rest = display_name:match("^(%b[])%s*(.*)$")
-                if l_tag and #l_rest > 0 then
-                    item_text = string.format("%s%s %s%s", color, l_rest, accent_hex, l_tag)
-                else
-                    item_text = color .. display_name
-                end
+                item_text = color .. display_name
             end
 
             table.insert(display, item_text)
@@ -928,17 +984,15 @@ function build_list()
         local display_name = p.name:gsub("%.lua$", "")
         local color = is_active and accent_hex or "\aC8C8C8FF"
 
+        local name, tag = extract_name_and_tag(display_name)
         local item_text
-        local rest, tag = display_name:match("^(.-)%s*(%b[])$")
-        if tag and #rest > 0 then
-            item_text = string.format("%s%s %s%s", color, rest, accent_hex, tag)
+        if tag then
+            local w = get_string_width(name)
+            local spaces_count = math.max(1, math.floor((target_tag_x - w) / 4.0 + 0.5))
+            local spaces = string.rep(" ", spaces_count)
+            item_text = string.format("%s%s%s%s%s", color, name, spaces, accent_hex, tag)
         else
-            local l_tag, l_rest = display_name:match("^(%b[])%s*(.*)$")
-            if l_tag and #l_rest > 0 then
-                item_text = string.format("%s%s %s%s", color, l_rest, accent_hex, l_tag)
-            else
-                item_text = color .. display_name
-            end
+            item_text = color .. display_name
         end
 
         table.insert(display, item_text)
