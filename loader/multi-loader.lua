@@ -741,7 +741,43 @@ function fetch_scripts()
     load_start = globals.realtime()
     update_list()
 
-    local jsdelivr_api = "https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@main/flat"
+    local function parse_jsdelivr_response(body)
+        local ok_parse, j_data = pcall(json.parse, body)
+        if ok_parse and type(j_data) == "table" and type(j_data.files) == "table" then
+            local found_scripts = {}
+            local found_urls = {}
+            local found_meta = {}
+
+            for _, item in ipairs(j_data.files) do
+                if item.name then
+                    local s_name = item.name:match("^/scripts/(.+%.lua)$")
+                    if s_name then
+                        table.insert(found_scripts, s_name)
+                        local d_url = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. url_encode(s_name)
+                        found_urls[s_name] = d_url
+                        found_meta[s_name] = {
+                            size = item.size,
+                            sha = item.hash,
+                            url = d_url,
+                            updated_at = nil
+                        }
+                    end
+                end
+            end
+
+            if #found_scripts > 0 then
+                last_update = globals.realtime()
+                is_loading = false
+                connected = true
+                scripts = found_scripts
+                script_urls = found_urls
+                script_meta = found_meta
+                finish_fetch_scripts()
+                return true
+            end
+        end
+        return false
+    end
 
     local function fetch_via_github()
         http.get(api_url, function(success, response)
@@ -795,45 +831,47 @@ function fetch_scripts()
         end)
     end
 
-    http.get(jsdelivr_api, function(j_ok, j_resp)
-        if j_ok and j_resp.status == 200 then
-            local ok_parse, j_data = pcall(json.parse, j_resp.body)
-            if ok_parse and type(j_data) == "table" and type(j_data.files) == "table" then
-                local found_scripts = {}
-                local found_urls = {}
-                local found_meta = {}
+    local function fetch_via_jsdelivr(sha)
+        local endpoint = sha and ("https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@" .. sha .. "/flat")
+            or ("https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@main/flat")
+        http.get(endpoint, function(j_ok, j_resp)
+            if j_ok and j_resp.status == 200 and parse_jsdelivr_response(j_resp.body) then
+                return
+            end
+            if sha then
+                http.get("https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@main/flat", function(m_ok, m_resp)
+                    if m_ok and m_resp.status == 200 and parse_jsdelivr_response(m_resp.body) then
+                        return
+                    end
+                    fetch_via_github()
+                end)
+            else
+                fetch_via_github()
+            end
+        end)
+    end
 
-                for _, item in ipairs(j_data.files) do
-                    if item.name then
-                        local s_name = item.name:match("^/scripts/(.+%.lua)$")
-                        if s_name then
-                            table.insert(found_scripts, s_name)
-                            local d_url = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. url_encode(s_name)
-                            found_urls[s_name] = d_url
-                            found_meta[s_name] = {
-                                size = item.size,
-                                sha = item.hash,
-                                url = d_url,
-                                updated_at = nil
-                            }
-                        end
+    local atom_url = "https://github.com/" .. repo .. "/commits/main.atom"
+    http.get(atom_url, function(a_ok, a_resp)
+        if a_ok and a_resp.status == 200 and type(a_resp.body) == "string" then
+            local sha = a_resp.body:match("<id>tag:github%.com,2008:Grit::Commit/([a-f0-9]+)</id>")
+            local updated_iso = a_resp.body:match("<updated>(%d+-%d+-%d+T%d+:%d+:%d+Z)</updated>")
+            if updated_iso then
+                local t_unix = parse_iso8601(updated_iso)
+                if t_unix then
+                    repo_scripts_updated_at = t_unix
+                    if database and database.write then
+                        pcall(database.write, "multi_loader_repo_time", t_unix)
+                        if database.flush then pcall(database.flush) end
                     end
                 end
-
-                if #found_scripts > 0 then
-                    last_update = globals.realtime()
-                    is_loading = false
-                    connected = true
-                    scripts = found_scripts
-                    script_urls = found_urls
-                    script_meta = found_meta
-                    finish_fetch_scripts()
-                    return
-                end
+            end
+            if sha and #sha >= 7 then
+                fetch_via_jsdelivr(sha)
+                return
             end
         end
-
-        fetch_via_github()
+        fetch_via_jsdelivr(nil)
     end)
 end
 
@@ -867,7 +905,7 @@ function build_list()
             else
                 local l_tag, l_rest = display_name:match("^(%b[])%s*(.*)$")
                 if l_tag and #l_rest > 0 then
-                    item_text = string.format("%s%s %s%s", accent_hex, l_tag, color, l_rest)
+                    item_text = string.format("%s%s %s%s", color, l_rest, accent_hex, l_tag)
                 else
                     item_text = color .. display_name
                 end
@@ -897,7 +935,7 @@ function build_list()
         else
             local l_tag, l_rest = display_name:match("^(%b[])%s*(.*)$")
             if l_tag and #l_rest > 0 then
-                item_text = string.format("%s%s %s%s", accent_hex, l_tag, color, l_rest)
+                item_text = string.format("%s%s %s%s", color, l_rest, accent_hex, l_tag)
             else
                 item_text = color .. display_name
             end
