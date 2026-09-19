@@ -7,7 +7,10 @@ local aa = require "gamesense/antiaim_funcs" or error "https://gamesense.pub/for
 local surface = require "gamesense/surface"
 local base64 = require "gamesense/base64" or error("Base64 library required")
 local clipboard = require "gamesense/clipboard" or error("Clipboard library required")
-local json = require("json")
+local has_json, json = pcall(require, "gamesense/json")
+if not has_json then
+    json = require("json")
+end
 local trace = require "gamesense/trace"
 local c_entity = require("gamesense/entity")
 local pui = require("gamesense/pui")
