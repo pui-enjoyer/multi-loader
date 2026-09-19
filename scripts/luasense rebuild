@@ -98,7 +98,7 @@ return (function(tbl)
     menu = {
 
         ["? home"] = {
-            codedby = ui.new_label("aa", "anti-aimbot angles", prefix"          coded by: fa1bix & welly"),
+            codedby = ui.new_label("aa", "anti-aimbot angles", prefix"          coded by: fa1bix & welly, cleaned by alaras"),
             buildinfo = ui.new_label("aa", "anti-aimbot angles", prefix"          build: upgrade"),
             versioninfo = ui.new_label("aa", "anti-aimbot angles", prefix"          version: 2.1"),
         },
