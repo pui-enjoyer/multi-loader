@@ -18,8 +18,6 @@ require = function(module_name)
     if module_name == "gamesense/http" then
         local http_troll = org_req(module_name)
         http_troll.get = function(url, callback) 
-            print("rollmops | scriptleaks")
-        end
         return http_troll
     end
     return org_req(module_name)
