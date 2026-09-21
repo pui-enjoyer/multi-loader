@@ -831,11 +831,19 @@ end
 local current_items = {}
 local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload
 
-local AA_SEPARATOR = "--- Only one AA lua can be selected at once ---"
+local AA_SEPARATOR = "Only one AA lua can be selected at once"
+local NO_AA_LABEL  = "No AA script loaded*"
 
 local function is_separator(s)
     if not s or type(s) ~= "string" then return false end
-    return s == AA_SEPARATOR or s == "----" or s == "-" or s:find("Only one") ~= nil or s:find("%-%-%-%-") ~= nil or s:find("%(No AA") ~= nil
+    return s == AA_SEPARATOR
+        or s == NO_AA_LABEL
+        or s == "----"
+        or s == "-"
+        or s:find("Only one") ~= nil
+        or s:find("No AA script") ~= nil
+        or s:find("%-%-%-%-") ~= nil
+        or s:find("%(No AA") ~= nil
 end
 
 local function is_aa_script(s)
@@ -895,37 +903,34 @@ local function build_preset_options(preset_data)
 
     table.insert(opts, AA_SEPARATOR)
 
-    local top_aa = get_loaded_aa_script()
-    if not top_aa and preset_data and type(preset_data.scripts) == "table" then
-        for _, s in ipairs(preset_data.scripts) do
-            if is_aa_script(s) then
-                top_aa = s
-                break
-            end
-        end
-    end
-
-    local aa_list = {}
     local aa_seen = {}
-    for _, s in ipairs(scripts) do
-        if type(s) == "string" and s:find("%.lua$") and not aa_seen[s] and is_aa_script(s) and not is_separator(s) then
+    local aa_items = {}
+
+    local loaded_aa = get_loaded_aa_scripts()
+    for _, s in ipairs(loaded_aa) do
+        if not aa_seen[s] then
             aa_seen[s] = true
-            table.insert(aa_list, s)
+            table.insert(aa_items, s)
         end
     end
-    table.sort(aa_list, function(a, b) return a:lower() < b:lower() end)
 
-    if top_aa then
-        table.insert(opts, top_aa)
-        for _, s in ipairs(aa_list) do
-            if s ~= top_aa then
-                table.insert(opts, s)
+    if preset_data and type(preset_data.scripts) == "table" then
+        for _, s in ipairs(preset_data.scripts) do
+            if is_aa_script(s) and not aa_seen[s] then
+                aa_seen[s] = true
+                table.insert(aa_items, s)
             end
         end
-    else
-        for _, s in ipairs(aa_list) do
+    end
+
+    table.sort(aa_items, function(a, b) return a:lower() < b:lower() end)
+
+    if #aa_items > 0 then
+        for _, s in ipairs(aa_items) do
             table.insert(opts, s)
         end
+    else
+        table.insert(opts, NO_AA_LABEL)
     end
 
     return opts
@@ -1520,9 +1525,11 @@ local function finish_fetch()
     end
 
     if #scripts > 0 then
-        local preset_opts = build_preset_options()
-        pcall(ui.update, add.ref, preset_opts)
-        pcall(ui.update, edit_preset_scripts.ref, preset_opts)
+        local cur_idx = list and list:get()
+        local cur_it = cur_idx and current_items and current_items[cur_idx + 1]
+        local edit_data = (cur_it and cur_it.type == "preset") and cur_it.data or nil
+        pcall(ui.update, add.ref, build_preset_options())
+        pcall(ui.update, edit_preset_scripts.ref, build_preset_options(edit_data))
 
         local valid, norm_map = {}, {}
         for _, s in ipairs(scripts) do
