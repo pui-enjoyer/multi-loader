@@ -757,8 +757,15 @@ end
 local current_items = {}
 local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload
 
+local AA_SEPARATOR = "--- Only one AA lua can be selected at once ---"
+
+local function is_separator(s)
+    if not s or type(s) ~= "string" then return false end
+    return s == AA_SEPARATOR or s == "----" or s == "-" or s:find("Only one") ~= nil or s:find("%-%-%-%-") ~= nil or s:find("%(No AA") ~= nil
+end
+
 local function is_aa_script(s)
-    if not s or s == "----" then return false end
+    if not s or type(s) ~= "string" or is_separator(s) then return false end
     if script_category and script_category[s] == "Anti-aimbot scripts" then
         return true
     end
@@ -771,34 +778,152 @@ local function is_aa_script(s)
     return false
 end
 
-local function get_global_preset_opts()
+local function get_loaded_aa_scripts()
+    local res = {}
+    local seen = {}
+    for s, is_on in pairs(loaded) do
+        if is_on and is_aa_script(s) and not seen[s] then
+            seen[s] = true
+            table.insert(res, s)
+        end
+    end
+    for s, sc in pairs(rt.scripts) do
+        if sc and sc.active and is_aa_script(s) and not seen[s] then
+            seen[s] = true
+            table.insert(res, s)
+        end
+    end
+    table.sort(res, function(a, b) return a:lower() < b:lower() end)
+    return res
+end
+
+local function get_loaded_aa_script()
+    local list = get_loaded_aa_scripts()
+    return list[1]
+end
+
+local function build_preset_options(preset_data)
     local g_list = {}
     local seen = {}
+
     for _, s in ipairs(scripts) do
-        if type(s) == "string" and s:find("%.lua$") and not seen[s] and not is_aa_script(s) then
+        if type(s) == "string" and s:find("%.lua$") and not seen[s] and not is_aa_script(s) and not is_separator(s) then
             seen[s] = true
             table.insert(g_list, s)
         end
     end
     table.sort(g_list, function(a, b) return a:lower() < b:lower() end)
-    return g_list
-end
 
-local function get_aa_preset_opts()
-    local aa_list = {}
-    local seen = {}
-    for _, s in ipairs(scripts) do
-        if type(s) == "string" and s:find("%.lua$") and not seen[s] and is_aa_script(s) then
-            seen[s] = true
-            table.insert(aa_list, s)
-        end
-    end
-    table.sort(aa_list, function(a, b) return a:lower() < b:lower() end)
-    local opts = {"-"}
-    for _, s in ipairs(aa_list) do
+    local opts = {}
+    for _, s in ipairs(g_list) do
         table.insert(opts, s)
     end
+
+    table.insert(opts, AA_SEPARATOR)
+
+    local aa_seen = {}
+    local aa_items = {}
+
+    local loaded_aa = get_loaded_aa_scripts()
+    for _, s in ipairs(loaded_aa) do
+        if not aa_seen[s] then
+            aa_seen[s] = true
+            table.insert(aa_items, s)
+        end
+    end
+
+    if preset_data and type(preset_data.scripts) == "table" then
+        for _, s in ipairs(preset_data.scripts) do
+            if is_aa_script(s) and not aa_seen[s] then
+                aa_seen[s] = true
+                table.insert(aa_items, s)
+            end
+        end
+    end
+
+    table.sort(aa_items, function(a, b) return a:lower() < b:lower() end)
+
+    if #aa_items > 0 then
+        for _, s in ipairs(aa_items) do
+            table.insert(opts, s)
+        end
+    else
+        table.insert(opts, "(No AA script loaded)")
+    end
+
     return opts
+end
+
+local function sanitize_selection(raw_selected, last_selected)
+    if type(raw_selected) ~= "table" then return {}, false end
+
+    local last_set = {}
+    if type(last_selected) == "table" then
+        for _, s in ipairs(last_selected) do
+            last_set[s] = true
+        end
+    end
+
+    local globals_sel = {}
+    local aa_sel = {}
+    local raw_set = {}
+
+    for _, s in ipairs(raw_selected) do
+        if type(s) == "string" and not is_separator(s) and not raw_set[s] then
+            raw_set[s] = true
+            if is_aa_script(s) then
+                table.insert(aa_sel, s)
+            else
+                table.insert(globals_sel, s)
+            end
+        end
+    end
+
+    local aa_changed = false
+    if #aa_sel > 1 then
+        local newly_added = nil
+        for _, s in ipairs(aa_sel) do
+            if not last_set[s] then
+                newly_added = s
+                break
+            end
+        end
+        if newly_added then
+            aa_sel = { newly_added }
+        else
+            aa_sel = { aa_sel[#aa_sel] }
+        end
+        aa_changed = true
+    end
+
+    local result = {}
+    local res_set = {}
+    for _, s in ipairs(globals_sel) do
+        table.insert(result, s)
+        res_set[s] = true
+    end
+    for _, s in ipairs(aa_sel) do
+        table.insert(result, s)
+        res_set[s] = true
+    end
+
+    local changed = aa_changed or (#result ~= #raw_selected)
+    if not changed then
+        for _, s in ipairs(raw_selected) do
+            if not res_set[s] then
+                changed = true
+                break
+            end
+        end
+    end
+
+    return result, changed
+end
+
+for _, p in ipairs(presets) do
+    if p.scripts then
+        p.scripts = sanitize_selection(p.scripts, {})
+    end
 end
 
 local menu = pui.group("config", "presets")
@@ -825,16 +950,31 @@ category:set_callback(function()
     update_list()
 end)
 
-local is_setting_preset = false
+local default_preset_opts = build_preset_options()
 
-local add_global = menu:multiselect("\n", get_global_preset_opts())
-add_global:set({})
-
-local add_aa = menu:combobox("AA script", get_aa_preset_opts())
-add_aa:set("-")
+local last_add_selection  = {}
+local last_edit_selection = {}
+local is_sanitizing_add   = false
+local is_sanitizing_edit  = false
+local is_setting_preset   = false
 
 local name = menu:textbox("\n ")
 name:set("")
+
+local add = menu:multiselect("\n", default_preset_opts)
+add:set({})
+
+add:set_callback(function()
+    if state.updating or is_sanitizing_add then return end
+    local cur = add:get() or {}
+    local sanitized, changed = sanitize_selection(cur, last_add_selection)
+    if changed then
+        is_sanitizing_add = true
+        add:set(sanitized)
+        is_sanitizing_add = false
+    end
+    last_add_selection = sanitized
+end)
 
 if database and database.read then
     local ok, v = pcall(database.read, "multi_loader_save_locally")
@@ -851,28 +991,23 @@ local btn_unload_script = menu:button("Unload script", function()
     if item and item.type == "script" then unload_script(item.name) end
 end)
 
-local edit_preset_scripts = menu:multiselect("\n", get_global_preset_opts())
+local edit_preset_scripts = menu:multiselect("\n", default_preset_opts)
 edit_preset_scripts:set({})
 edit_preset_scripts:set_visible(false)
 
-local edit_preset_aa = menu:combobox("AA script", get_aa_preset_opts())
-edit_preset_aa:set("-")
-edit_preset_aa:set_visible(false)
-
 local function sync_edit_preset()
-    if state.updating or is_setting_preset then return end
+    if state.updating or is_setting_preset or is_sanitizing_edit then return end
     local item = current_items[list:get() + 1]
     if not (item and item.type == "preset" and item.data) then return end
 
-    local g_sel = edit_preset_scripts:get() or {}
-    local aa_sel = edit_preset_aa:get()
-    local new_sc = {}
-    for _, s in ipairs(g_sel) do
-        if s ~= "-" and s ~= "----" then table.insert(new_sc, s) end
+    local raw_sc = edit_preset_scripts:get() or {}
+    local new_sc, changed = sanitize_selection(raw_sc, last_edit_selection)
+    if changed then
+        is_sanitizing_edit = true
+        edit_preset_scripts:set(new_sc)
+        is_sanitizing_edit = false
     end
-    if aa_sel and aa_sel ~= "-" and aa_sel ~= "----" then
-        table.insert(new_sc, aa_sel)
-    end
+    last_edit_selection = new_sc
 
     local old_sc    = item.data.scripts or {}
     item.data.scripts = new_sc
@@ -907,7 +1042,6 @@ local function sync_edit_preset()
 end
 
 edit_preset_scripts:set_callback(sync_edit_preset)
-edit_preset_aa:set_callback(sync_edit_preset)
 
 local btn_load_preset = menu:button("Load preset", function()
     local item = current_items[list:get() + 1]
@@ -959,16 +1093,9 @@ spacer3:set_visible(false)
 spacer4:set_visible(false)
 
 local btn_create = menu:button("Create autoload preset", function()
-    local p_name    = name:get()
-    local g_scripts = add_global:get() or {}
-    local aa_chosen = add_aa:get()
-    local p_scripts = {}
-    for _, s in ipairs(g_scripts) do
-        if s ~= "-" and s ~= "----" then table.insert(p_scripts, s) end
-    end
-    if aa_chosen and aa_chosen ~= "-" and aa_chosen ~= "----" then
-        table.insert(p_scripts, aa_chosen)
-    end
+    local p_name      = name:get()
+    local raw_scripts = add:get() or {}
+    local p_scripts   = sanitize_selection(raw_scripts, last_add_selection)
     if p_name == "" or #p_scripts == 0 then return end
 
     local now   = unix_now()
@@ -991,8 +1118,10 @@ local btn_create = menu:button("Create autoload preset", function()
         if database.flush then pcall(database.flush) end
     end
     name:set("")
-    add_global:set({})
-    add_aa:set("-")
+    is_sanitizing_add = true
+    add:set({})
+    is_sanitizing_add = false
+    last_add_selection = {}
     update_list()
 end)
 
@@ -1075,7 +1204,7 @@ local function http_get(s_name, cb)
 end
 
 function load_script(s_name, silent)
-    if not s_name or s_name == "----" or loaded[s_name] then return end
+    if not s_name or is_separator(s_name) or loaded[s_name] then return end
 
     loaded[s_name] = true
     if not silent then update_list() end
@@ -1194,7 +1323,7 @@ function load_script(s_name, silent)
 end
 
 function unload_script(s_name, silent)
-    if not s_name or s_name == "----" or (not loaded[s_name] and not (rt.scripts[s_name] and rt.scripts[s_name].active)) then return end
+    if not s_name or is_separator(s_name) or (not loaded[s_name] and not (rt.scripts[s_name] and rt.scripts[s_name].active)) then return end
 
     local sc = rt.scripts[s_name]
     if sc then
@@ -1246,7 +1375,7 @@ function toggle_preset(p)
         active_preset = nil
         preset_unload_times[p.name] = globals.realtime()
         for _, s in ipairs(p.scripts or {}) do
-            if s ~= "----" then unload_script(s, true) end
+            if not is_separator(s) then unload_script(s, true) end
         end
     else
         if active_preset then
@@ -1254,7 +1383,7 @@ function toggle_preset(p)
             for _, prev_p in ipairs(presets) do
                 if prev_p.name == active_preset then
                     for _, s in ipairs(prev_p.scripts or {}) do
-                        if s ~= "----" then unload_script(s, true) end
+                        if not is_separator(s) then unload_script(s, true) end
                     end
                 end
             end
@@ -1262,7 +1391,7 @@ function toggle_preset(p)
         active_preset = p.name
         preset_load_times[p.name] = globals.realtime()
         for _, s in ipairs(p.scripts or {}) do
-            if s ~= "----" then load_script(s, true) end
+            if not is_separator(s) then load_script(s, true) end
         end
     end
 
@@ -1281,7 +1410,7 @@ function check_autoload()
             found = true
             preset_load_times[p.name] = globals.realtime()
             for _, s in ipairs(p.scripts or {}) do
-                if s ~= "----" then load_script(s, true) end
+                if not is_separator(s) then load_script(s, true) end
             end
             update_list()
             break
@@ -1308,16 +1437,13 @@ local function finish_fetch()
     end
 
     if #scripts > 0 then
-        local g_opts = get_global_preset_opts()
-        local aa_opts = get_aa_preset_opts()
-        pcall(ui.update, add_global.ref, g_opts)
-        pcall(ui.update, edit_preset_scripts.ref, g_opts)
-        pcall(ui.update, add_aa.ref, aa_opts)
-        pcall(ui.update, edit_preset_aa.ref, aa_opts)
+        local preset_opts = build_preset_options()
+        pcall(ui.update, add.ref, preset_opts)
+        pcall(ui.update, edit_preset_scripts.ref, preset_opts)
 
         local valid, norm_map = {}, {}
         for _, s in ipairs(scripts) do
-            if s ~= "----" and s ~= "-" then
+            if not is_separator(s) then
                 valid[s] = true
                 norm_map[s:gsub("%b[]", ""):gsub("%s+", ""):lower()] = s
             end
@@ -1327,29 +1453,33 @@ local function finish_fetch()
             if p.scripts then
                 local clean = {}
                 for _, s in ipairs(p.scripts) do
-                    if s ~= "----" and s ~= "-" and valid[s] then
+                    if not is_separator(s) and valid[s] then
                         table.insert(clean, s)
-                    elseif s ~= "----" and s ~= "-" then
+                    elseif not is_separator(s) then
                         local norm = norm_map[s:gsub("%b[]", ""):gsub("%s+", ""):lower()]
                         if norm then table.insert(clean, norm) end
                     end
                 end
-                p.scripts = clean
+                p.scripts = sanitize_selection(clean, {})
             end
         end
 
-        local cur = add_global:get()
+        local cur = add:get()
         if type(cur) == "table" and #cur > 0 then
             local clean = {}
             for _, s in ipairs(cur) do
-                if s ~= "----" and s ~= "-" and valid[s] then
+                if not is_separator(s) and valid[s] then
                     table.insert(clean, s)
-                elseif s ~= "----" and s ~= "-" then
+                elseif not is_separator(s) then
                     local norm = norm_map[s:gsub("%b[]", ""):gsub("%s+", ""):lower()]
                     if norm then table.insert(clean, norm) end
                 end
             end
-            add_global:set(clean)
+            clean = sanitize_selection(clean, last_add_selection)
+            is_sanitizing_add = true
+            add:set(clean)
+            is_sanitizing_add = false
+            last_add_selection = clean
         end
     end
 
@@ -1662,6 +1792,8 @@ local function get_info_text()
     end
 end
 
+local was_new = false
+
 function update_vis()
     local idx  = list:get()
     local item = current_items[idx + 1]
@@ -1682,10 +1814,10 @@ function update_vis()
         btn_load_script:set_visible(false); btn_unload_script:set_visible(false)
         btn_load_preset:set_visible(false); btn_unload_preset:set_visible(false)
         btn_delete_preset:set_visible(false); edit_preset_scripts:set_visible(false)
-        edit_preset_aa:set_visible(false)
         spacer1:set_visible(false); spacer2:set_visible(false)
         spacer3:set_visible(false); spacer4:set_visible(false)
-        btn_create:set_visible(false); add_global:set_visible(false); add_aa:set_visible(false); name:set_visible(false)
+        btn_create:set_visible(false); name:set_visible(false); add:set_visible(false)
+        was_new = false
         return
     end
 
@@ -1713,30 +1845,41 @@ function update_vis()
     end
     if is_preset then
         edit_preset_scripts:set_visible(true)
-        edit_preset_aa:set_visible(true)
         btn_delete_preset:set_visible(true)
     end
 
     if is_preset and item.data then
         is_setting_preset = true
-        local sc = item.data.scripts or {}
-        local g_sel = {}
-        local aa_sel = "-"
-        for _, s in ipairs(sc) do
-            if is_aa_script(s) then
-                aa_sel = s
-            elseif s ~= "-" and s ~= "----" then
-                table.insert(g_sel, s)
-            end
-        end
-        edit_preset_scripts:set(g_sel)
-        pcall(edit_preset_aa.set, edit_preset_aa, aa_sel)
+        local preset_opts = build_preset_options(item.data)
+        pcall(ui.update, edit_preset_scripts.ref, preset_opts)
+        local sanitized = sanitize_selection(item.data.scripts or {}, {})
+        last_edit_selection = sanitized
+        edit_preset_scripts:set(sanitized)
         is_setting_preset = false
     end
 
     if is_new then
-        add_global:set_visible(true); add_aa:set_visible(true); name:set_visible(true); btn_create:set_visible(true)
+        name:set_visible(true); add:set_visible(true); btn_create:set_visible(true)
+        local preset_opts = build_preset_options()
+        pcall(ui.update, add.ref, preset_opts)
+        if not was_new then
+            local loaded_aa = get_loaded_aa_script()
+            local init_sel = {}
+            for _, s in ipairs(scripts) do
+                if loaded[s] and not is_separator(s) and not is_aa_script(s) then
+                    table.insert(init_sel, s)
+                end
+            end
+            if loaded_aa then
+                table.insert(init_sel, loaded_aa)
+            end
+            is_sanitizing_add = true
+            add:set(init_sel)
+            is_sanitizing_add = false
+            last_add_selection = init_sel
+        end
     end
+    was_new = is_new
 
     -- then hide
     if not show_ls then btn_load_script:set_visible(false) end
@@ -1749,11 +1892,10 @@ function update_vis()
     end
     if not is_preset then
         edit_preset_scripts:set_visible(false)
-        edit_preset_aa:set_visible(false)
         btn_delete_preset:set_visible(false)
     end
     if not is_new then
-        add_global:set_visible(false); add_aa:set_visible(false); name:set_visible(false); btn_create:set_visible(false)
+        name:set_visible(false); add:set_visible(false); btn_create:set_visible(false)
     end
 end
 
