@@ -734,6 +734,74 @@ for _, p in ipairs(presets) do
     end
 end
 
+do
+    local default_global_scripts = {
+        "Aimbot logs.lua", "Angelwings 2.6 debug.lua", "Antarctica paste.lua", "Autobuy.lua",
+        "Breakables ragebot.lua", "Bullet tracers.lua", "Dormant aimbot.lua", "Emberlash AA.lua",
+        "Esp eagle.lua", "Excellent cam.lua", "Fakepitch exploit.lua", "Fast ladder.lua",
+        "Fastleaks loader.lua", "Glow health bar.lua", "Hitsound enhanced.lua", "Hysteria debug.lua",
+        "Lagcomp box.lua", "Luasense AA.lua", "Nadehelper.lua", "Neverlose hotkeys.lua",
+        "Scope overlay.lua", "Simple jumpscout.lua", "Solix AA.lua", "Unsafe charge.lua",
+        "Visual fog.lua", "Wraith beta.lua",
+    }
+
+    local default_aa_scripts = {
+        "AcatelBeta.lua", "Acidtech.lua", "Aesthetic.lua", "Aimtools.lua",
+        "Alien.lua", "Alpha_gs.lua", "AlphaBuild.lua", "Alucard.lua",
+        "Ambani.lua", "Amina-yaw.lua", "Amnesia.lua", "Amphibia.lua",
+        "Ancient.lua", "Angelwings.lua", "Angelwingsfixxxxlasttt.lua", "Annesty.lua",
+        "Anoflow.lua", "Antarcticareborn.lua", "Astra.lua", "Aura.lua",
+        "Avensive.lua", "Bloodlust.lua", "Bloodstone.lua", "Bloomtool.lua",
+        "Bluhgang.lua", "Bolt.lua", "Calypso.lua", "Carinthia.lua",
+        "Chernobyl.lua", "CorsaResolver.lua", "Dangerous.lua", "Dash.lua",
+        "Dejavu.lua", "Divine.lua", "Drainyaw.lua", "Ecstasy.lua",
+        "Elders.lua", "Elixir.lua", "Emberlash.lua", "Emotional.lua",
+        "Enderphobia.lua", "Enthusiasm.lua", "Ephoria.lua", "Eternity.lua",
+        "Etternace.lua", "Everlast.lua", "Excellent.lua", "Exscord.lua",
+        "Feelsense.lua", "Flax-yaw.lua", "Genesis.lua", "Genesisdump.lua",
+        "Gloriosa-pasted.lua", "Halflife.lua", "Helios.lua", "Hellyaw.lua",
+        "Hyperion.lua", "HysteriaDebug.lua", "Inferno.lua", "Infinixdump.lua",
+        "Interitus.lua", "INVINSIBLE.lua", "Jitterdev.lua", "Kitten.lua",
+        "Kittyhook.lua", "Komaru.lua", "Lavender.lua", "Leaf-recode.lua",
+        "Leviatan.lua", "Lonely.lua", "Lotus.lua", "Luasense.lua",
+        "Mercury.lua", "Metasetrecode.lua", "Mewtwotech.lua", "Mlc-yaw recode.lua",
+        "Model_changer.lua", "Moisten.lua", "Momentum.lua", "Myth.lua",
+        "Mytools.lua", "New hysteria.lua", "Nighcore.lua", "Nyahook.lua",
+        "Omegamoe.lua", "Onesensedev.lua", "Opulent.lua", "Outlaw.lua",
+        "Ozndump.lua", "Paradise.lua", "Rebellion.lua", "Resolverx.lua",
+        "Rinnegan.lua", "Risen.lua", "Risennew.lua", "Romance.lua",
+        "Sanchez.lua", "Senkotech.lua", "Serenity.lua", "Starlight.lua",
+        "Stellar.lua", "Symmtest.lua", "Syphonic.lua", "Tabsense.lua",
+        "Universe.lua", "Vandal.lua", "Venco.lua", "Venus.lua",
+        "Winter.lua", "Wraith.lua", "Xo-yaw.lua", "Zephyrus.lua",
+        "Zov-yaw.lua",
+    }
+
+    for _, sn in ipairs(default_global_scripts) do
+        local rel = "misc stuff/" .. sn
+        local enc_rel = "misc%20stuff/" .. url_enc(sn)
+        local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+        table.insert(scripts, sn)
+        script_category[sn] = "Global storage"
+        script_relpath[sn] = rel
+        script_urls[sn] = du
+        script_meta[sn] = { size = 0, sha = nil, url = du, updated_at = nil }
+    end
+
+    for _, sn in ipairs(default_aa_scripts) do
+        local rel = "anti-aimbot/" .. sn
+        local enc_rel = "anti-aimbot/" .. url_enc(sn)
+        local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+        table.insert(scripts, sn)
+        script_category[sn] = "Anti-aimbot scripts"
+        script_relpath[sn] = rel
+        script_urls[sn] = du
+        script_meta[sn] = { size = 0, sha = nil, url = du, updated_at = nil }
+    end
+
+    table.sort(scripts, function(a, b) return a:lower() < b:lower() end)
+end
+
 if database and database.read then
     local ok, v = pcall(database.read, "multi_loader_cached_meta")
     if ok and type(v) == "table" then script_meta = v end
@@ -745,13 +813,19 @@ if database and database.read then
     if ok3 and type(v3) == "number" and v3 > 0 then repo_updated_at = v3 end
 
     local ok4, v4 = pcall(database.read, "multi_loader_cached_scripts")
-    if ok4 and type(v4) == "table" and #v4 > 0 then scripts = v4 end
-
     local ok5, v5 = pcall(database.read, "multi_loader_cached_cat")
-    if ok5 and type(v5) == "table" then script_category = v5 end
-
     local ok6, v6 = pcall(database.read, "multi_loader_cached_rel")
-    if ok6 and type(v6) == "table" then script_relpath = v6 end
+    if ok4 and type(v4) == "table" and #v4 >= 50 and ok5 and type(v5) == "table" and ok6 and type(v6) == "table" then
+        local aa_cnt = 0
+        for _, s in ipairs(v4) do
+            if v5[s] == "Anti-aimbot scripts" then aa_cnt = aa_cnt + 1 end
+        end
+        if aa_cnt >= 20 then
+            scripts = v4
+            script_category = v5
+            script_relpath = v6
+        end
+    end
 end
 
 local current_items = {}
@@ -821,34 +895,37 @@ local function build_preset_options(preset_data)
 
     table.insert(opts, AA_SEPARATOR)
 
-    local aa_seen = {}
-    local aa_items = {}
-
-    local loaded_aa = get_loaded_aa_scripts()
-    for _, s in ipairs(loaded_aa) do
-        if not aa_seen[s] then
-            aa_seen[s] = true
-            table.insert(aa_items, s)
-        end
-    end
-
-    if preset_data and type(preset_data.scripts) == "table" then
+    local top_aa = get_loaded_aa_script()
+    if not top_aa and preset_data and type(preset_data.scripts) == "table" then
         for _, s in ipairs(preset_data.scripts) do
-            if is_aa_script(s) and not aa_seen[s] then
-                aa_seen[s] = true
-                table.insert(aa_items, s)
+            if is_aa_script(s) then
+                top_aa = s
+                break
             end
         end
     end
 
-    table.sort(aa_items, function(a, b) return a:lower() < b:lower() end)
+    local aa_list = {}
+    local aa_seen = {}
+    for _, s in ipairs(scripts) do
+        if type(s) == "string" and s:find("%.lua$") and not aa_seen[s] and is_aa_script(s) and not is_separator(s) then
+            aa_seen[s] = true
+            table.insert(aa_list, s)
+        end
+    end
+    table.sort(aa_list, function(a, b) return a:lower() < b:lower() end)
 
-    if #aa_items > 0 then
-        for _, s in ipairs(aa_items) do
-            table.insert(opts, s)
+    if top_aa then
+        table.insert(opts, top_aa)
+        for _, s in ipairs(aa_list) do
+            if s ~= top_aa then
+                table.insert(opts, s)
+            end
         end
     else
-        table.insert(opts, "(No AA script loaded)")
+        for _, s in ipairs(aa_list) do
+            table.insert(opts, s)
+        end
     end
 
     return opts
@@ -1428,12 +1505,18 @@ end
 local function finish_fetch()
     table.sort(scripts, function(a, b) return a:lower() < b:lower() end)
 
-    if #scripts > 0 and database and database.write then
-        pcall(database.write, "multi_loader_cached_scripts", scripts)
-        pcall(database.write, "multi_loader_cached_meta", script_meta)
-        pcall(database.write, "multi_loader_cached_cat", script_category)
-        pcall(database.write, "multi_loader_cached_rel", script_relpath)
-        if database.flush then pcall(database.flush) end
+    if #scripts >= 50 and database and database.write then
+        local aa_cnt = 0
+        for _, s in ipairs(scripts) do
+            if script_category[s] == "Anti-aimbot scripts" then aa_cnt = aa_cnt + 1 end
+        end
+        if aa_cnt >= 20 then
+            pcall(database.write, "multi_loader_cached_scripts", scripts)
+            pcall(database.write, "multi_loader_cached_meta", script_meta)
+            pcall(database.write, "multi_loader_cached_cat", script_category)
+            pcall(database.write, "multi_loader_cached_rel", script_relpath)
+            if database.flush then pcall(database.flush) end
+        end
     end
 
     if #scripts > 0 then
@@ -1494,136 +1577,110 @@ function fetch_scripts()
 
     local json = ml_json()
 
-    local function try_jsdelivr_body(body)
-        local ok, data = pcall(json.parse, body)
-        if not (ok and type(data) == "table" and type(data.files) == "table") then return false end
+    local function apply_manifest(data)
+        if not (type(data) == "table" and type(data.scripts) == "table" and #data.scripts >= 20) then
+            return false
+        end
 
-        local found_s, found_u, found_m = {}, {}, {}
-        local found_c, found_r = {}, {}
-        for _, item in ipairs(data.files) do
-            if item.name then
-                local folder, sn = item.name:match("^/scripts/([^/]+)/(.+%.lua)$")
-                if not folder then
-                    sn = item.name:match("^/scripts/(.+%.lua)$")
-                    folder = "misc stuff"
-                end
-                if sn then
-                    local f_low = folder:lower()
-                    local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global storage"
-                    if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
-                    local rel = folder .. "/" .. sn
-                    local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
-                    local du = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. enc_rel
-                    table.insert(found_s, sn)
-                    found_u[sn] = du
-                    found_m[sn] = {size = item.size, sha = item.hash, url = du, updated_at = nil}
-                    found_c[sn] = cat
-                    found_r[sn] = rel
-                end
+        local new_s, new_u, new_m = {}, {}, {}
+        local new_c, new_r = {}, {}
+
+        for _, item in ipairs(data.scripts) do
+            if item.name and item.relpath then
+                local sn = item.name
+                local cat = item.category or "Global storage"
+                local rel = item.relpath
+                local folder = rel:match("^([^/]+)/") or "misc stuff"
+                local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
+                local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+                table.insert(new_s, sn)
+                new_u[sn] = du
+                new_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = nil }
+                new_c[sn] = cat
+                new_r[sn] = rel
             end
         end
 
-        if #found_s > 0 then
+        if #new_s >= 20 then
             state.last_update = globals.realtime()
             state.loading = false
             state.connected = true
-            scripts, script_urls, script_meta = found_s, found_u, found_m
-            script_category, script_relpath = found_c, found_r
+            scripts, script_urls, script_meta = new_s, new_u, new_m
+            script_category, script_relpath = new_c, new_r
             finish_fetch()
             return true
         end
         return false
     end
 
-    local function fetch_github()
-        local tree_url = "https://api.github.com/repos/" .. repo .. "/git/trees/main?recursive=1"
-        http.get(tree_url, function(ok, resp)
-            state.last_update = globals.realtime()
-            state.loading = false
+    local raw_manifest_url = "https://raw.githubusercontent.com/" .. repo .. "/main/manifest.json"
+    http.get(raw_manifest_url, function(ok, resp)
+        if ok and resp.status == 200 then
+            local ok2, data = pcall(json.parse, resp.body)
+            if ok2 and apply_manifest(data) then return end
+        end
 
-            if ok and resp.status == 200 then
-                local ok2, data = pcall(json.parse, resp.body)
-                if ok2 and type(data) == "table" and type(data.tree) == "table" then
-                    state.connected = true
-                    scripts, script_urls, script_meta = {}, {}, {}
-                    script_category, script_relpath = {}, {}
+        local cdn_manifest_url = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/manifest.json"
+        http.get(cdn_manifest_url, function(ok2, resp2)
+            if ok2 and resp2.status == 200 then
+                local ok3, data2 = pcall(json.parse, resp2.body)
+                if ok3 and apply_manifest(data2) then return end
+            end
 
-                    for _, item in ipairs(data.tree) do
-                        if item.type == "blob" and item.path and item.path:find("%.lua$") then
-                            local folder, sn = item.path:match("^scripts/([^/]+)/(.+%.lua)$")
-                            if not folder then
-                                sn = item.path:match("^scripts/(.+%.lua)$")
-                                folder = "misc stuff"
-                            end
-                            if sn then
-                                local f_low = folder:lower()
-                                local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global storage"
-                                if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
-                                local rel = folder .. "/" .. sn
-                                local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
-                                local raw_durl = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
-                                table.insert(scripts, sn)
-                                script_urls[sn] = raw_durl
-                                script_category[sn] = cat
-                                script_relpath[sn] = rel
-
-                                local cached_time = nil
-                                if database and database.read then
-                                    local saved_sha = database.read("multi_loader_github_sha_" .. sn)
-                                    if saved_sha == item.sha then
-                                        cached_time = database.read("multi_loader_github_time_" .. sn)
-                                    end
+            local tree_url = "https://api.github.com/repos/" .. repo .. "/git/trees/main?recursive=1"
+            http.get(tree_url, function(ok3, resp3)
+                if ok3 and resp3.status == 200 then
+                    local ok4, data3 = pcall(json.parse, resp3.body)
+                    if ok4 and type(data3) == "table" and type(data3.tree) == "table" then
+                        local found_s, found_u, found_m = {}, {}, {}
+                        local found_c, found_r = {}, {}
+                        for _, item in ipairs(data3.tree) do
+                            if item.type == "blob" and item.path and item.path:find("%.lua$") then
+                                local folder, sn = item.path:match("^scripts/([^/]+)/(.+%.lua)$")
+                                if not folder then
+                                    sn = item.path:match("^scripts/(.+%.lua)$")
+                                    folder = "misc stuff"
                                 end
-
-                                script_meta[sn] = {size = item.size, sha = item.sha, url = raw_durl, updated_at = cached_time}
+                                if sn then
+                                    local f_low = folder:lower()
+                                    local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global storage"
+                                    if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
+                                    local rel = folder .. "/" .. sn
+                                    local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
+                                    local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+                                    table.insert(found_s, sn)
+                                    found_u[sn] = du
+                                    found_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = nil }
+                                    found_c[sn] = cat
+                                    found_r[sn] = rel
+                                end
                             end
                         end
-                    end
-
-                    if #scripts > 0 then finish_fetch(); return end
-                end
-            end
-
-            state.connected = false
-            state.err_code  = "Offline"
-            check_autoload()
-            update_list()
-        end)
-    end
-
-    local function fetch_jsdelivr(sha)
-        local ep = sha and ("https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@" .. sha .. "/flat")
-                       or  ("https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@main/flat")
-        http.get(ep, function(ok, resp)
-            if ok and resp.status == 200 and try_jsdelivr_body(resp.body) then return end
-            if sha then
-                http.get("https://data.jsdelivr.com/v1/package/gh/" .. repo .. "@main/flat", function(ok2, resp2)
-                    if ok2 and resp2.status == 200 and try_jsdelivr_body(resp2.body) then return end
-                    fetch_github()
-                end)
-            else
-                fetch_github()
-            end
-        end)
-    end
-
-    http.get("https://github.com/" .. repo .. "/commits/main.atom", function(ok, resp)
-        if ok and resp.status == 200 and type(resp.body) == "string" then
-            local sha     = resp.body:match("<id>tag:github%.com,2008:Grit::Commit/([a-f0-9]+)</id>")
-            local updated = resp.body:match("<updated>(%d+-%d+-%d+T%d+:%d+:%d+Z)</updated>")
-            if updated then
-                local t = parse_iso(updated)
-                if t then
-                    repo_updated_at = t
-                    if database and database.write then
-                        pcall(database.write, "multi_loader_repo_time", t)
-                        if database.flush then pcall(database.flush) end
+                        if #found_s >= 20 then
+                            state.last_update = globals.realtime()
+                            state.loading = false
+                            state.connected = true
+                            scripts, script_urls, script_meta = found_s, found_u, found_m
+                            script_category, script_relpath = found_c, found_r
+                            finish_fetch()
+                            return
+                        end
                     end
                 end
-            end
-            if sha and #sha >= 7 then fetch_jsdelivr(sha); return end
-        end
-        fetch_jsdelivr(nil)
+
+                state.loading = false
+                if #scripts > 0 then
+                    state.connected = true
+                    state.last_update = globals.realtime()
+                    finish_fetch()
+                else
+                    state.connected = false
+                    state.err_code = "Offline"
+                    check_autoload()
+                    update_list()
+                end
+            end)
+        end)
     end)
 end
 
