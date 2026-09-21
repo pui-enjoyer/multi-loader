@@ -557,6 +557,8 @@ local function ensure_dir(path)
     end)
 end
 ensure_dir("multi-loader")
+ensure_dir("multi-loader/misc stuff")
+ensure_dir("multi-loader/anti-aimbot")
 
 local readfile  = rawget(_G, "readfile")
 local writefile = rawget(_G, "writefile")
@@ -637,21 +639,34 @@ local function parse_iso(str)
 end
 
 local function file_mtime(s_name)
-    for _, path in ipairs({"multi-loader/" .. s_name, "csgo/multi-loader/" .. s_name, s_name, "csgo/" .. s_name}) do
-        local ok, res = pcall(function()
-            local d = ffi.new("ml_WIN32_FA_DATA")
-            if ffi.C.GetFileAttributesExA(path, 0, d) ~= 0 then
-                local hi = ffi.cast("uint64_t", d.wtime.hi)
-                local lo = ffi.cast("uint64_t", d.wtime.lo)
-                if hi > 0ULL or lo > 0ULL then
-                    local ft = hi * 4294967296ULL + lo
-                    if ft > 116444736000000000ULL then
-                        return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
+    local rel = script_relpath and script_relpath[s_name]
+    local candidates = {
+        rel and ("multi-loader/" .. rel),
+        rel and ("csgo/multi-loader/" .. rel),
+        "multi-loader/misc stuff/" .. s_name,
+        "multi-loader/anti-aimbot/" .. s_name,
+        "multi-loader/" .. s_name,
+        "csgo/multi-loader/" .. s_name,
+        s_name,
+        "csgo/" .. s_name
+    }
+    for _, path in ipairs(candidates) do
+        if path then
+            local ok, res = pcall(function()
+                local d = ffi.new("ml_WIN32_FA_DATA")
+                if ffi.C.GetFileAttributesExA(path, 0, d) ~= 0 then
+                    local hi = ffi.cast("uint64_t", d.wtime.hi)
+                    local lo = ffi.cast("uint64_t", d.wtime.lo)
+                    if hi > 0ULL or lo > 0ULL then
+                        local ft = hi * 4294967296ULL + lo
+                        if ft > 116444736000000000ULL then
+                            return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
+                        end
                     end
                 end
-            end
-        end)
-        if ok and res then return res end
+            end)
+            if ok and res then return res end
+        end
     end
 end
 
@@ -672,7 +687,7 @@ local function url_enc(str)
 end
 
 local repo    = "pui-enjoyer/multi-loader"
-local api_url = "https://api.github.com/repos/" .. repo .. "/contents/scripts"
+local api_url = "https://api.github.com/repos/" .. repo .. "/git/trees/main?recursive=1"
 local raw_url = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/"
 
 local state = {
@@ -687,18 +702,20 @@ local state = {
     load_start  = globals.realtime()
 }
 
-local scripts            = {}
-local script_urls        = {}
-local script_meta        = {}
-local loaded             = {}
-local script_load_times  = {}
+local scripts             = {}
+local script_urls         = {}
+local script_meta         = {}
+local script_category     = {}
+local script_relpath      = {}
+local loaded              = {}
+local script_load_times   = {}
 local script_unload_times = {}
-local script_file_times  = {}
-local preset_load_times  = {}
+local script_file_times   = {}
+local preset_load_times   = {}
 local preset_unload_times = {}
-local presets            = (database and database.read and database.read("multi_loader_presets")) or {}
-local active_preset      = nil
-local repo_updated_at    = nil
+local presets             = (database and database.read and database.read("multi_loader_presets")) or {}
+local active_preset       = nil
+local repo_updated_at     = nil
 
 for _, p in ipairs(presets) do
     if not p.updated_at and database and database.read then
@@ -718,6 +735,12 @@ if database and database.read then
 
     local ok4, v4 = pcall(database.read, "multi_loader_cached_scripts")
     if ok4 and type(v4) == "table" and #v4 > 0 then scripts = v4 end
+
+    local ok5, v5 = pcall(database.read, "multi_loader_cached_cat")
+    if ok5 and type(v5) == "table" then script_category = v5 end
+
+    local ok6, v6 = pcall(database.read, "multi_loader_cached_rel")
+    if ok6 and type(v6) == "table" then script_relpath = v6 end
 end
 
 local current_items = {}
@@ -725,10 +748,27 @@ local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_sc
 
 local menu = pui.group("config", "presets")
 
-local refresh = menu:button("Refresh script list", function() fetch_scripts() end)
-local list    = menu:listbox(" ", {""})
-local info    = menu:label("Updated 0 seconds ago")
-local reload  = menu:checkbox("Save scripts locally")
+local refresh  = menu:button("Refresh script list", function() fetch_scripts() end)
+local category = menu:combobox("Show scripts", {"Misc stuff", "Anti-aimbot"})
+local list     = menu:listbox(" ", {""})
+local info     = menu:label("Updated 0 seconds ago")
+local reload   = menu:checkbox("Save scripts locally")
+
+if database and database.read then
+    local ok, v = pcall(database.read, "multi_loader_category")
+    if ok and type(v) == "string" and (v == "Misc stuff" or v == "Anti-aimbot") then
+        category:set(v)
+    end
+end
+
+category:set_callback(function()
+    if database and database.write then
+        pcall(database.write, "multi_loader_category", category:get())
+        if database.flush then pcall(database.flush) end
+    end
+    state.last_idx = 1
+    update_list()
+end)
 
 local default_scripts = {}
 if database and database.read then
@@ -946,8 +986,10 @@ local function execute(body, s_name, silent)
 end
 
 local function http_get(s_name, cb)
-    local j_url  = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. url_enc(s_name)
-    local r_url  = raw_url .. url_enc(s_name)
+    local rel = script_relpath and script_relpath[s_name] or s_name
+    local enc_rel = rel:gsub("([^/]+)", function(part) return url_enc(part) end)
+    local j_url   = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. enc_rel
+    local r_url   = raw_url .. enc_rel
     local primary = script_urls[s_name] or j_url
 
     http.get(primary, function(ok, resp)
@@ -968,14 +1010,24 @@ function load_script(s_name, silent)
 
     local save_local = reload:get()
     local meta       = script_meta[s_name]
+    local rel        = script_relpath and script_relpath[s_name] or s_name
     local local_raw  = nil
     local local_norm = nil
 
     if readfile then
-        local ok, content = pcall(readfile, "multi-loader/" .. s_name)
-        if ok and type(content) == "string" and #content > 0 then
-            local_raw  = content
-            local_norm = content:gsub("\r\n", "\n")
+        local candidates = {
+            "multi-loader/" .. rel,
+            "multi-loader/misc stuff/" .. s_name,
+            "multi-loader/anti-aimbot/" .. s_name,
+            "multi-loader/" .. s_name
+        }
+        for _, p in ipairs(candidates) do
+            local ok, content = pcall(readfile, p)
+            if ok and type(content) == "string" and #content > 0 then
+                local_raw  = content
+                local_norm = content:gsub("\r\n", "\n")
+                break
+            end
         end
     end
 
@@ -999,7 +1051,9 @@ function load_script(s_name, silent)
                     if ok and resp.status == 200 then
                         local new_ln = count_lines(resp.body)
                         ensure_dir("multi-loader")
-                        if writefile then pcall(writefile, "multi-loader/" .. s_name, resp.body) end
+                        ensure_dir("multi-loader/misc stuff")
+                        ensure_dir("multi-loader/anti-aimbot")
+                        if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
                         local now = unix_now()
                         script_file_times[s_name] = now
                         if database and database.write then
@@ -1035,7 +1089,9 @@ function load_script(s_name, silent)
                 end
                 local new_ln = count_lines(resp.body)
                 ensure_dir("multi-loader")
-                if writefile then pcall(writefile, "multi-loader/" .. s_name, resp.body) end
+                ensure_dir("multi-loader/misc stuff")
+                ensure_dir("multi-loader/anti-aimbot")
+                if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
                 local now = unix_now()
                 script_file_times[s_name] = now
                 if database and database.write then
@@ -1161,9 +1217,13 @@ function check_autoload()
 end
 
 local function finish_fetch()
+    table.sort(scripts, function(a, b) return a:lower() < b:lower() end)
+
     if #scripts > 0 and database and database.write then
         pcall(database.write, "multi_loader_cached_scripts", scripts)
         pcall(database.write, "multi_loader_cached_meta", script_meta)
+        pcall(database.write, "multi_loader_cached_cat", script_category)
+        pcall(database.write, "multi_loader_cached_rel", script_relpath)
         if database.flush then pcall(database.flush) end
     end
 
@@ -1223,14 +1283,24 @@ function fetch_scripts()
         if not (ok and type(data) == "table" and type(data.files) == "table") then return false end
 
         local found_s, found_u, found_m = {}, {}, {}
+        local found_c, found_r = {}, {}
         for _, item in ipairs(data.files) do
             if item.name then
-                local sn = item.name:match("^/scripts/(.+%.lua)$")
+                local folder, sn = item.name:match("^/scripts/([^/]+)/(.+%.lua)$")
+                if not folder then
+                    sn = item.name:match("^/scripts/(.+%.lua)$")
+                    folder = "misc stuff"
+                end
                 if sn then
+                    local cat = (folder == "anti-aimbot") and "Anti-aimbot" or "Misc stuff"
+                    local rel = folder .. "/" .. sn
+                    local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
+                    local du = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. enc_rel
                     table.insert(found_s, sn)
-                    local du = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. url_enc(sn)
                     found_u[sn] = du
                     found_m[sn] = {size = item.size, sha = item.hash, url = du, updated_at = nil}
+                    found_c[sn] = cat
+                    found_r[sn] = rel
                 end
             end
         end
@@ -1240,6 +1310,7 @@ function fetch_scripts()
             state.loading = false
             state.connected = true
             scripts, script_urls, script_meta = found_s, found_u, found_m
+            script_category, script_relpath = found_c, found_r
             finish_fetch()
             return true
         end
@@ -1247,30 +1318,45 @@ function fetch_scripts()
     end
 
     local function fetch_github()
-        http.get(api_url, function(ok, resp)
+        local tree_url = "https://api.github.com/repos/" .. repo .. "/git/trees/main?recursive=1"
+        http.get(tree_url, function(ok, resp)
             state.last_update = globals.realtime()
             state.loading = false
 
             if ok and resp.status == 200 then
                 local ok2, data = pcall(json.parse, resp.body)
-                if ok2 and type(data) == "table" then
+                if ok2 and type(data) == "table" and type(data.tree) == "table" then
                     state.connected = true
                     scripts, script_urls, script_meta = {}, {}, {}
+                    script_category, script_relpath = {}, {}
 
-                    for _, item in ipairs(data) do
-                        if item.type == "file" and item.name and item.name:find("%.lua$") then
-                            table.insert(scripts, item.name)
-                            script_urls[item.name] = item.download_url
-
-                            local cached_time = nil
-                            if database and database.read then
-                                local saved_sha = database.read("multi_loader_github_sha_" .. item.name)
-                                if saved_sha == item.sha then
-                                    cached_time = database.read("multi_loader_github_time_" .. item.name)
-                                end
+                    for _, item in ipairs(data.tree) do
+                        if item.type == "blob" and item.path and item.path:find("%.lua$") then
+                            local folder, sn = item.path:match("^scripts/([^/]+)/(.+%.lua)$")
+                            if not folder then
+                                sn = item.path:match("^scripts/(.+%.lua)$")
+                                folder = "misc stuff"
                             end
+                            if sn then
+                                local cat = (folder == "anti-aimbot") and "Anti-aimbot" or "Misc stuff"
+                                local rel = folder .. "/" .. sn
+                                local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
+                                local raw_durl = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+                                table.insert(scripts, sn)
+                                script_urls[sn] = raw_durl
+                                script_category[sn] = cat
+                                script_relpath[sn] = rel
 
-                            script_meta[item.name] = {size = item.size, sha = item.sha, url = item.download_url, updated_at = cached_time}
+                                local cached_time = nil
+                                if database and database.read then
+                                    local saved_sha = database.read("multi_loader_github_sha_" .. sn)
+                                    if saved_sha == item.sha then
+                                        cached_time = database.read("multi_loader_github_time_" .. sn)
+                                    end
+                                end
+
+                                script_meta[sn] = {size = item.size, sha = item.sha, url = raw_durl, updated_at = cached_time}
+                            end
                         end
                     end
 
@@ -1331,7 +1417,10 @@ function build_list()
     local display = {}
     current_items = {}
 
-    local hdr = state.connected and "\a57575770 --= SCRIPTS =--" or "\a57575770 --= SCRIPTS (OFFLINE) =--"
+    local current_cat = category and category:get() or "Misc stuff"
+    local hdr_title = current_cat:upper()
+    local hdr = state.connected and ("\a57575770 --= " .. hdr_title .. " =--")
+                                 or ("\a57575770 --= " .. hdr_title .. " (OFFLINE) =--")
     table.insert(display, hdr)
     table.insert(current_items, {type = "header"})
 
@@ -1340,11 +1429,20 @@ function build_list()
         table.insert(current_items, {type = "loading"})
     else
         local acc = accent_hex()
+        local count = 0
         for _, s in ipairs(scripts) do
-            local on    = not not loaded[s]
-            local dname = s:gsub("%.lua$", ""):gsub("^%b[]%s*", ""):gsub("%s*%b[]$", "")
-            table.insert(display, (on and acc or "\aC8C8C8FF") .. dname)
-            table.insert(current_items, {type = "script", name = s})
+            local s_cat = script_category[s] or "Misc stuff"
+            if s_cat == current_cat then
+                count = count + 1
+                local on    = not not loaded[s]
+                local dname = s:gsub("%.lua$", ""):gsub("^%b[]%s*", ""):gsub("%s*%b[]$", "")
+                table.insert(display, (on and acc or "\aC8C8C8FF") .. dname)
+                table.insert(current_items, {type = "script", name = s})
+            end
+        end
+        if count == 0 and not state.loading then
+            table.insert(display, "\a808080FFNo scripts in this category")
+            table.insert(current_items, {type = "empty"})
         end
     end
 
@@ -1459,15 +1557,19 @@ function update_vis()
     local idx  = list:get()
     local item = current_items[idx + 1]
 
-    if item and (item.type == "header" or item.type == "loading" or item.type == "error") then
-        if state.last_idx and current_items[state.last_idx + 1] and current_items[state.last_idx + 1].type ~= "header" then
+    if item and (item.type == "header" or item.type == "loading" or item.type == "error" or item.type == "empty") then
+        if state.last_idx and current_items[state.last_idx + 1] and current_items[state.last_idx + 1].type ~= "header" and current_items[state.last_idx + 1].type ~= "empty" then
             idx  = state.last_idx
             item = current_items[idx + 1]
         end
     end
 
-    if not item or item.type == "error" then
-        info:set("Failed to connect: " .. state.err_code)
+    if not item or item.type == "error" or item.type == "empty" then
+        if item and item.type == "empty" then
+            info:set("Category is empty")
+        else
+            info:set("Failed to connect: " .. state.err_code)
+        end
         btn_load_script:set_visible(false); btn_unload_script:set_visible(false)
         btn_load_preset:set_visible(false); btn_unload_preset:set_visible(false)
         btn_delete_preset:set_visible(false); edit_preset_scripts:set_visible(false)
@@ -1539,9 +1641,9 @@ list:set_callback(function()
     local item = current_items[idx + 1]
     if not item then return end
 
-    if item.type == "header" or item.type == "loading" or item.type == "error" then
+    if item.type == "header" or item.type == "loading" or item.type == "error" or item.type == "empty" then
         state.updating = true
-        if state.last_idx and state.last_idx < #current_items and current_items[state.last_idx + 1] and current_items[state.last_idx + 1].type ~= "header" then
+        if state.last_idx and state.last_idx < #current_items and current_items[state.last_idx + 1] and current_items[state.last_idx + 1].type ~= "header" and current_items[state.last_idx + 1].type ~= "empty" then
             list:set(state.last_idx)
         else
             for i, it in ipairs(current_items) do
