@@ -749,14 +749,16 @@ local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_sc
 local menu = pui.group("config", "presets")
 
 local refresh  = menu:button("Refresh script list", function() fetch_scripts() end)
-local category = menu:combobox("Show scripts", {"Misc stuff", "Anti-aimbot"})
+local category = menu:combobox("\n", {"AA", "Other"})
 local list     = menu:listbox(" ", {""})
 local info     = menu:label("Updated 0 seconds ago")
 local reload   = menu:checkbox("Save scripts locally")
 
+category:set("Other")
+
 if database and database.read then
     local ok, v = pcall(database.read, "multi_loader_category")
-    if ok and type(v) == "string" and (v == "Misc stuff" or v == "Anti-aimbot") then
+    if ok and type(v) == "string" and (v == "AA" or v == "Other") then
         category:set(v)
     end
 end
@@ -1292,7 +1294,9 @@ function fetch_scripts()
                     folder = "misc stuff"
                 end
                 if sn then
-                    local cat = (folder == "anti-aimbot") and "Anti-aimbot" or "Misc stuff"
+                    local f_low = folder:lower()
+                    local cat = (f_low:find("anti%-aim") or f_low == "aa") and "AA" or "Other"
+                    if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
                     local rel = folder .. "/" .. sn
                     local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
                     local du = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/scripts/" .. enc_rel
@@ -1338,7 +1342,9 @@ function fetch_scripts()
                                 folder = "misc stuff"
                             end
                             if sn then
-                                local cat = (folder == "anti-aimbot") and "Anti-aimbot" or "Misc stuff"
+                                local f_low = folder:lower()
+                                local cat = (f_low:find("anti%-aim") or f_low == "aa") and "AA" or "Other"
+                                if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
                                 local rel = folder .. "/" .. sn
                                 local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
                                 local raw_durl = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
@@ -1417,8 +1423,8 @@ function build_list()
     local display = {}
     current_items = {}
 
-    local current_cat = category and category:get() or "Misc stuff"
-    local hdr_title = current_cat:upper()
+    local current_cat = category and category:get() or "Other"
+    local hdr_title = (current_cat == "AA") and "AA SCRIPTS" or "OTHER SCRIPTS"
     local hdr = state.connected and ("\a57575770 --= " .. hdr_title .. " =--")
                                  or ("\a57575770 --= " .. hdr_title .. " (OFFLINE) =--")
     table.insert(display, hdr)
@@ -1431,11 +1437,14 @@ function build_list()
         local acc = accent_hex()
         local count = 0
         for _, s in ipairs(scripts) do
-            local s_cat = script_category[s] or "Misc stuff"
+            local s_cat = script_category[s] or "Other"
             if s_cat == current_cat then
                 count = count + 1
                 local on    = not not loaded[s]
                 local dname = s:gsub("%.lua$", ""):gsub("^%b[]%s*", ""):gsub("%s*%b[]$", "")
+                if #dname > 0 then
+                    dname = dname:sub(1, 1):upper() .. dname:sub(2)
+                end
                 table.insert(display, (on and acc or "\aC8C8C8FF") .. dname)
                 table.insert(current_items, {type = "script", name = s})
             end
