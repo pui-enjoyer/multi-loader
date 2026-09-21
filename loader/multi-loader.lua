@@ -608,22 +608,26 @@ pcall(ffi.cdef, [[
         uint32_t   size_hi; uint32_t size_lo;
     } ml_WIN32_FA_DATA;
     int __stdcall GetFileAttributesExA(const char* path, int lvl, void* out);
+    void __stdcall GetSystemTimeAsFileTime(ml_FILETIME* ft);
 ]])
 
 local function unix_now()
-    if client.unix_time then
-        local ok, t = pcall(client.unix_time)
-        if ok and t and t > 0 then return t end
-    end
-    if client.timestamp then
-        local ok, ms = pcall(client.timestamp)
-        if ok and ms and ms > 0 then return math.floor(ms / 1000) end
-    end
+    local ok, res = pcall(function()
+        local ft = ffi.new("ml_FILETIME")
+        ffi.C.GetSystemTimeAsFileTime(ft)
+        local hi = ffi.cast("uint64_t", ft.hi)
+        local lo = ffi.cast("uint64_t", ft.lo)
+        local t64 = hi * 4294967296ULL + lo
+        if t64 > 116444736000000000ULL then
+            return tonumber((t64 - 116444736000000000ULL) / 10000000ULL)
+        end
+    end)
+    if ok and res and res > 0 then return res end
     if os and os.time then
-        local ok, t = pcall(os.time)
-        if ok and t and t > 0 then return t end
+        local ok2, t = pcall(os.time)
+        if ok2 and t and t > 0 then return t end
     end
-    return globals.realtime()
+    return math.floor(globals.realtime())
 end
 
 local function parse_iso(str)
@@ -639,14 +643,20 @@ local function parse_iso(str)
 end
 
 local function file_mtime(s_name)
+    if not s_name or s_name == "----" or s_name == "-" then return nil end
     local rel = script_relpath and script_relpath[s_name]
     local candidates = {
-        rel and ("multi-loader/" .. rel),
         rel and ("csgo/multi-loader/" .. rel),
+        rel and ("multi-loader/" .. rel),
+        rel and ("G:/multi-loader-repo/scripts/" .. rel),
+        "csgo/multi-loader/misc stuff/" .. s_name,
+        "csgo/multi-loader/anti-aimbot/" .. s_name,
         "multi-loader/misc stuff/" .. s_name,
         "multi-loader/anti-aimbot/" .. s_name,
-        "multi-loader/" .. s_name,
+        "G:/multi-loader-repo/scripts/misc stuff/" .. s_name,
+        "G:/multi-loader-repo/scripts/anti-aimbot/" .. s_name,
         "csgo/multi-loader/" .. s_name,
+        "multi-loader/" .. s_name,
         s_name,
         "csgo/" .. s_name
     }
@@ -668,6 +678,7 @@ local function file_mtime(s_name)
             if ok and res then return res end
         end
     end
+    return nil
 end
 
 local menu_color_ref   = ui.reference("MISC", "Settings", "Menu color")
@@ -760,107 +771,34 @@ local function is_aa_script(s)
     return false
 end
 
-local function build_preset_options()
+local function get_global_preset_opts()
     local g_list = {}
+    local seen = {}
+    for _, s in ipairs(scripts) do
+        if type(s) == "string" and s:find("%.lua$") and not seen[s] and not is_aa_script(s) then
+            seen[s] = true
+            table.insert(g_list, s)
+        end
+    end
+    table.sort(g_list, function(a, b) return a:lower() < b:lower() end)
+    return g_list
+end
+
+local function get_aa_preset_opts()
     local aa_list = {}
     local seen = {}
-
     for _, s in ipairs(scripts) do
-        if type(s) == "string" and s:find("%.lua$") and not seen[s] and s ~= "----" then
+        if type(s) == "string" and s:find("%.lua$") and not seen[s] and is_aa_script(s) then
             seen[s] = true
-            if is_aa_script(s) then
-                table.insert(aa_list, s)
-            else
-                table.insert(g_list, s)
-            end
+            table.insert(aa_list, s)
         end
     end
-
-    table.sort(g_list, function(a, b) return a:lower() < b:lower() end)
     table.sort(aa_list, function(a, b) return a:lower() < b:lower() end)
-
-    local opts = {}
-    for _, s in ipairs(g_list) do
+    local opts = {"-"}
+    for _, s in ipairs(aa_list) do
         table.insert(opts, s)
     end
-    if #aa_list > 0 then
-        table.insert(opts, "----")
-        for _, s in ipairs(aa_list) do
-            table.insert(opts, s)
-        end
-    end
     return opts
-end
-
-local function sanitize_selection(raw_selected, last_selected)
-    if type(raw_selected) ~= "table" then return {}, false end
-
-    local last_set = {}
-    if type(last_selected) == "table" then
-        for _, s in ipairs(last_selected) do
-            last_set[s] = true
-        end
-    end
-
-    local globals_sel = {}
-    local aa_sel = {}
-    local raw_set = {}
-
-    for _, s in ipairs(raw_selected) do
-        if type(s) == "string" and s ~= "----" and not raw_set[s] then
-            raw_set[s] = true
-            if is_aa_script(s) then
-                table.insert(aa_sel, s)
-            else
-                table.insert(globals_sel, s)
-            end
-        end
-    end
-
-    if #aa_sel > 1 then
-        local newly_added = nil
-        for _, s in ipairs(aa_sel) do
-            if not last_set[s] then
-                newly_added = s
-                break
-            end
-        end
-        if newly_added then
-            aa_sel = { newly_added }
-        else
-            aa_sel = { aa_sel[#aa_sel] }
-        end
-    end
-
-    local result = {}
-    for _, s in ipairs(globals_sel) do
-        table.insert(result, s)
-    end
-    for _, s in ipairs(aa_sel) do
-        table.insert(result, s)
-    end
-
-    local changed = false
-    if #result ~= #raw_selected then
-        changed = true
-    else
-        local res_set = {}
-        for _, s in ipairs(result) do res_set[s] = true end
-        for _, s in ipairs(raw_selected) do
-            if not res_set[s] then
-                changed = true
-                break
-            end
-        end
-    end
-
-    return result, changed
-end
-
-for _, p in ipairs(presets) do
-    if p.scripts then
-        p.scripts = sanitize_selection(p.scripts, {})
-    end
 end
 
 local menu = pui.group("config", "presets")
@@ -871,16 +809,10 @@ local list     = menu:listbox(" ", {""})
 local info     = menu:label("Updated 0 seconds ago")
 local reload   = menu:checkbox("Save scripts locally")
 
-category:set("Global storage")
-
 if database and database.read then
     local ok, v = pcall(database.read, "multi_loader_category")
-    if ok and type(v) == "string" then
-        if v == "AA" or v == "Anti-aimbot" or v == "Anti-aimbot scripts" then
-            category:set("Anti-aimbot scripts")
-        else
-            category:set("Global storage")
-        end
+    if ok and type(v) == "string" and (v == "Anti-aimbot scripts" or v == "AA" or v == "Anti-aimbot") then
+        category:set("Anti-aimbot scripts")
     end
 end
 
@@ -893,28 +825,13 @@ category:set_callback(function()
     update_list()
 end)
 
-local default_preset_opts = build_preset_options()
+local is_setting_preset = false
 
-local last_add_selection  = {}
-local last_edit_selection = {}
-local is_sanitizing_add   = false
-local is_sanitizing_edit  = false
-local is_setting_preset   = false
+local add_global = menu:multiselect("\n", get_global_preset_opts())
+add_global:set({})
 
-local add  = menu:multiselect("\n", default_preset_opts)
-add:set({})
-
-add:set_callback(function()
-    if state.updating or is_sanitizing_add then return end
-    local cur = add:get() or {}
-    local sanitized, changed = sanitize_selection(cur, last_add_selection)
-    if changed then
-        is_sanitizing_add = true
-        add:set(sanitized)
-        is_sanitizing_add = false
-    end
-    last_add_selection = sanitized
-end)
+local add_aa = menu:combobox("AA script", get_aa_preset_opts())
+add_aa:set("-")
 
 local name = menu:textbox("\n ")
 name:set("")
@@ -934,23 +851,28 @@ local btn_unload_script = menu:button("Unload script", function()
     if item and item.type == "script" then unload_script(item.name) end
 end)
 
-local edit_preset_scripts = menu:multiselect("\n", default_preset_opts)
+local edit_preset_scripts = menu:multiselect("\n", get_global_preset_opts())
 edit_preset_scripts:set({})
 edit_preset_scripts:set_visible(false)
 
-edit_preset_scripts:set_callback(function()
-    if state.updating or is_setting_preset or is_sanitizing_edit then return end
+local edit_preset_aa = menu:combobox("AA script", get_aa_preset_opts())
+edit_preset_aa:set("-")
+edit_preset_aa:set_visible(false)
+
+local function sync_edit_preset()
+    if state.updating or is_setting_preset then return end
     local item = current_items[list:get() + 1]
     if not (item and item.type == "preset" and item.data) then return end
 
-    local raw_sc = edit_preset_scripts:get() or {}
-    local new_sc, changed = sanitize_selection(raw_sc, last_edit_selection)
-    if changed then
-        is_sanitizing_edit = true
-        edit_preset_scripts:set(new_sc)
-        is_sanitizing_edit = false
+    local g_sel = edit_preset_scripts:get() or {}
+    local aa_sel = edit_preset_aa:get()
+    local new_sc = {}
+    for _, s in ipairs(g_sel) do
+        if s ~= "-" and s ~= "----" then table.insert(new_sc, s) end
     end
-    last_edit_selection = new_sc
+    if aa_sel and aa_sel ~= "-" and aa_sel ~= "----" then
+        table.insert(new_sc, aa_sel)
+    end
 
     local old_sc    = item.data.scripts or {}
     item.data.scripts = new_sc
@@ -982,7 +904,10 @@ edit_preset_scripts:set_callback(function()
         end
         update_list()
     end
-end)
+end
+
+edit_preset_scripts:set_callback(sync_edit_preset)
+edit_preset_aa:set_callback(sync_edit_preset)
 
 local btn_load_preset = menu:button("Load preset", function()
     local item = current_items[list:get() + 1]
@@ -1034,9 +959,16 @@ spacer3:set_visible(false)
 spacer4:set_visible(false)
 
 local btn_create = menu:button("Create autoload preset", function()
-    local p_name      = name:get()
-    local raw_scripts = add:get() or {}
-    local p_scripts   = sanitize_selection(raw_scripts, last_add_selection)
+    local p_name    = name:get()
+    local g_scripts = add_global:get() or {}
+    local aa_chosen = add_aa:get()
+    local p_scripts = {}
+    for _, s in ipairs(g_scripts) do
+        if s ~= "-" and s ~= "----" then table.insert(p_scripts, s) end
+    end
+    if aa_chosen and aa_chosen ~= "-" and aa_chosen ~= "----" then
+        table.insert(p_scripts, aa_chosen)
+    end
     if p_name == "" or #p_scripts == 0 then return end
 
     local now   = unix_now()
@@ -1059,10 +991,8 @@ local btn_create = menu:button("Create autoload preset", function()
         if database.flush then pcall(database.flush) end
     end
     name:set("")
-    is_sanitizing_add = true
-    add:set({})
-    is_sanitizing_add = false
-    last_add_selection = {}
+    add_global:set({})
+    add_aa:set("-")
     update_list()
 end)
 
@@ -1378,13 +1308,16 @@ local function finish_fetch()
     end
 
     if #scripts > 0 then
-        local preset_opts = build_preset_options()
-        pcall(ui.update, add.ref, preset_opts)
-        pcall(ui.update, edit_preset_scripts.ref, preset_opts)
+        local g_opts = get_global_preset_opts()
+        local aa_opts = get_aa_preset_opts()
+        pcall(ui.update, add_global.ref, g_opts)
+        pcall(ui.update, edit_preset_scripts.ref, g_opts)
+        pcall(ui.update, add_aa.ref, aa_opts)
+        pcall(ui.update, edit_preset_aa.ref, aa_opts)
 
         local valid, norm_map = {}, {}
         for _, s in ipairs(scripts) do
-            if s ~= "----" then
+            if s ~= "----" and s ~= "-" then
                 valid[s] = true
                 norm_map[s:gsub("%b[]", ""):gsub("%s+", ""):lower()] = s
             end
@@ -1394,33 +1327,29 @@ local function finish_fetch()
             if p.scripts then
                 local clean = {}
                 for _, s in ipairs(p.scripts) do
-                    if s ~= "----" and valid[s] then
+                    if s ~= "----" and s ~= "-" and valid[s] then
                         table.insert(clean, s)
-                    elseif s ~= "----" then
+                    elseif s ~= "----" and s ~= "-" then
                         local norm = norm_map[s:gsub("%b[]", ""):gsub("%s+", ""):lower()]
                         if norm then table.insert(clean, norm) end
                     end
                 end
-                p.scripts = sanitize_selection(clean, {})
+                p.scripts = clean
             end
         end
 
-        local cur = add:get()
+        local cur = add_global:get()
         if type(cur) == "table" and #cur > 0 then
             local clean = {}
             for _, s in ipairs(cur) do
-                if s ~= "----" and valid[s] then
+                if s ~= "----" and s ~= "-" and valid[s] then
                     table.insert(clean, s)
-                elseif s ~= "----" then
+                elseif s ~= "----" and s ~= "-" then
                     local norm = norm_map[s:gsub("%b[]", ""):gsub("%s+", ""):lower()]
                     if norm then table.insert(clean, norm) end
                 end
             end
-            clean = sanitize_selection(clean, last_add_selection)
-            is_sanitizing_add = true
-            add:set(clean)
-            is_sanitizing_add = false
-            last_add_selection = clean
+            add_global:set(clean)
         end
     end
 
@@ -1659,12 +1588,13 @@ function update_list()
 end
 
 local function fmt_ago(prefix, t)
-    if not t then return "Not updated" end
+    if not t or t <= 0 then return "Not updated" end
     local now = unix_now()
-    local sec = t > 1000000000 and math.max(0, math.floor(now - t))
-                                or  math.max(0, math.floor(globals.realtime() - t))
+    local sec = math.max(0, math.floor(now - t))
 
-    if sec < 60 then
+    if sec < 5 then
+        return prefix .. " just now"
+    elseif sec < 60 then
         return string.format("%s %d second%s ago", prefix, sec, sec == 1 and "" or "s")
     elseif sec < 3600 then
         local m = math.floor(sec / 60)
@@ -1690,21 +1620,32 @@ local function get_info_text()
     local idx  = list:get()
     local item = current_items[idx + 1]
 
-    if not item then
-        return state.connected and fmt_ago("Updated", state.last_update) or "Offline mode (" .. state.err_code .. ")"
+    if not item or item.type == "header" or item.type == "empty" then
+        local current_cat = category and category:get() or "Global storage"
+        local count = 0
+        for _, s in ipairs(scripts) do
+            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
+        end
+        return string.format("%d script%s available", count, count == 1 and "" or "s")
     end
 
     if item.type == "script" then
+        local mtime = file_mtime(item.name)
+        if mtime then
+            return fmt_ago("Updated", mtime)
+        end
         local t = (script_meta[item.name] and script_meta[item.name].updated_at)
-               or (database and database.read and database.read("multi_loader_github_time_" .. item.name))
-               or file_mtime(item.name)
                or (database and database.read and database.read("multi_loader_updated_" .. item.name))
                or repo_updated_at
                or (database and database.read and database.read("multi_loader_repo_time"))
                or script_file_times[item.name]
-        if t then return fmt_ago("Updated", t)
-        elseif state.loading then return "Checking update time..."
-        else return "Not updated" end
+        if t then
+            return fmt_ago("Updated", t)
+        elseif state.loading then
+            return "Checking update time..."
+        else
+            return "Not downloaded"
+        end
     elseif item.type == "preset" then
         local p = item.data
         local t = (p and p.updated_at) or (database and database.read and database.read("multi_loader_preset_updated_" .. item.name))
@@ -1712,7 +1653,12 @@ local function get_info_text()
     elseif item.type == "new_preset" then
         return "Auto-loads selected scripts"
     else
-        return state.connected and fmt_ago("Updated", state.last_update) or "Offline mode (" .. state.err_code .. ")"
+        local current_cat = category and category:get() or "Global storage"
+        local count = 0
+        for _, s in ipairs(scripts) do
+            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
+        end
+        return string.format("%d script%s available", count, count == 1 and "" or "s")
     end
 end
 
@@ -1736,9 +1682,10 @@ function update_vis()
         btn_load_script:set_visible(false); btn_unload_script:set_visible(false)
         btn_load_preset:set_visible(false); btn_unload_preset:set_visible(false)
         btn_delete_preset:set_visible(false); edit_preset_scripts:set_visible(false)
+        edit_preset_aa:set_visible(false)
         spacer1:set_visible(false); spacer2:set_visible(false)
         spacer3:set_visible(false); spacer4:set_visible(false)
-        btn_create:set_visible(false); add:set_visible(false); name:set_visible(false)
+        btn_create:set_visible(false); add_global:set_visible(false); add_aa:set_visible(false); name:set_visible(false)
         return
     end
 
@@ -1766,19 +1713,29 @@ function update_vis()
     end
     if is_preset then
         edit_preset_scripts:set_visible(true)
+        edit_preset_aa:set_visible(true)
         btn_delete_preset:set_visible(true)
     end
 
     if is_preset and item.data then
         is_setting_preset = true
-        local sanitized = sanitize_selection(item.data.scripts or {}, {})
-        last_edit_selection = sanitized
-        edit_preset_scripts:set(sanitized)
+        local sc = item.data.scripts or {}
+        local g_sel = {}
+        local aa_sel = "-"
+        for _, s in ipairs(sc) do
+            if is_aa_script(s) then
+                aa_sel = s
+            elseif s ~= "-" and s ~= "----" then
+                table.insert(g_sel, s)
+            end
+        end
+        edit_preset_scripts:set(g_sel)
+        pcall(edit_preset_aa.set, edit_preset_aa, aa_sel)
         is_setting_preset = false
     end
 
     if is_new then
-        add:set_visible(true); name:set_visible(true); btn_create:set_visible(true)
+        add_global:set_visible(true); add_aa:set_visible(true); name:set_visible(true); btn_create:set_visible(true)
     end
 
     -- then hide
@@ -1792,10 +1749,11 @@ function update_vis()
     end
     if not is_preset then
         edit_preset_scripts:set_visible(false)
+        edit_preset_aa:set_visible(false)
         btn_delete_preset:set_visible(false)
     end
     if not is_new then
-        add:set_visible(false); name:set_visible(false); btn_create:set_visible(false)
+        add_global:set_visible(false); add_aa:set_visible(false); name:set_visible(false); btn_create:set_visible(false)
     end
 end
 
