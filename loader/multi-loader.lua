@@ -749,17 +749,21 @@ local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_sc
 local menu = pui.group("config", "presets")
 
 local refresh  = menu:button("Refresh script list", function() fetch_scripts() end)
-local category = menu:combobox("\n", {"AA", "Other"})
+local category = menu:combobox("\n", {"Anti-aimbot scripts", "Global scripts"})
 local list     = menu:listbox(" ", {""})
 local info     = menu:label("Updated 0 seconds ago")
 local reload   = menu:checkbox("Save scripts locally")
 
-category:set("Other")
+category:set("Global scripts")
 
 if database and database.read then
     local ok, v = pcall(database.read, "multi_loader_category")
-    if ok and type(v) == "string" and (v == "AA" or v == "Other") then
-        category:set(v)
+    if ok and type(v) == "string" then
+        if v == "AA" or v == "Anti-aimbot" or v == "Anti-aimbot scripts" then
+            category:set("Anti-aimbot scripts")
+        elseif v == "Other" or v == "Misc stuff" or v == "Global scripts" then
+            category:set("Global scripts")
+        end
     end
 end
 
@@ -1295,7 +1299,7 @@ function fetch_scripts()
                 end
                 if sn then
                     local f_low = folder:lower()
-                    local cat = (f_low:find("anti%-aim") or f_low == "aa") and "AA" or "Other"
+                    local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global scripts"
                     if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
                     local rel = folder .. "/" .. sn
                     local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
@@ -1343,7 +1347,7 @@ function fetch_scripts()
                             end
                             if sn then
                                 local f_low = folder:lower()
-                                local cat = (f_low:find("anti%-aim") or f_low == "aa") and "AA" or "Other"
+                                local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global scripts"
                                 if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
                                 local rel = folder .. "/" .. sn
                                 local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
@@ -1423,8 +1427,8 @@ function build_list()
     local display = {}
     current_items = {}
 
-    local current_cat = category and category:get() or "Other"
-    local hdr_title = (current_cat == "AA") and "AA SCRIPTS" or "OTHER SCRIPTS"
+    local current_cat = category and category:get() or "Global scripts"
+    local hdr_title = (current_cat == "Anti-aimbot scripts") and "AA SCRIPTS" or "GLOBAL SCRIPTS"
     local hdr = state.connected and ("\a57575770 --= " .. hdr_title .. " =--")
                                  or ("\a57575770 --= " .. hdr_title .. " (OFFLINE) =--")
     table.insert(display, hdr)
@@ -1437,7 +1441,7 @@ function build_list()
         local acc = accent_hex()
         local count = 0
         for _, s in ipairs(scripts) do
-            local s_cat = script_category[s] or "Other"
+            local s_cat = script_category[s] or "Global scripts"
             if s_cat == current_cat then
                 count = count + 1
                 local on    = not not loaded[s]
