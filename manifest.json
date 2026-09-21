@@ -1,0 +1,840 @@
+{
+  "updated_at": 1790004240,
+  "count": 139,
+  "scripts": [
+    {
+      "name": "AcatelBeta.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/AcatelBeta.lua",
+      "size": 200817
+    },
+    {
+      "name": "Acidtech.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Acidtech.lua",
+      "size": 212754
+    },
+    {
+      "name": "Aesthetic.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Aesthetic.lua",
+      "size": 71600
+    },
+    {
+      "name": "Aimtools.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Aimtools.lua",
+      "size": 12962
+    },
+    {
+      "name": "Alien.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Alien.lua",
+      "size": 123103
+    },
+    {
+      "name": "AlphaBuild.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/AlphaBuild.lua",
+      "size": 143920
+    },
+    {
+      "name": "Alpha_gs.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Alpha_gs.lua",
+      "size": 94586
+    },
+    {
+      "name": "Alucard.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Alucard.lua",
+      "size": 52594
+    },
+    {
+      "name": "Ambani.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Ambani.lua",
+      "size": 85338
+    },
+    {
+      "name": "Amina-yaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Amina-yaw.lua",
+      "size": 188063
+    },
+    {
+      "name": "Amnesia.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Amnesia.lua",
+      "size": 97848
+    },
+    {
+      "name": "Amphibia.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Amphibia.lua",
+      "size": 96471
+    },
+    {
+      "name": "Ancient.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Ancient.lua",
+      "size": 149973
+    },
+    {
+      "name": "Angelwings.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Angelwings.lua",
+      "size": 98128
+    },
+    {
+      "name": "Angelwingsfixxxxlasttt.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Angelwingsfixxxxlasttt.lua",
+      "size": 500432
+    },
+    {
+      "name": "Annesty.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Annesty.lua",
+      "size": 122933
+    },
+    {
+      "name": "Anoflow.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Anoflow.lua",
+      "size": 285682
+    },
+    {
+      "name": "Antarcticareborn.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Antarcticareborn.lua",
+      "size": 138128
+    },
+    {
+      "name": "Astra.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Astra.lua",
+      "size": 253487
+    },
+    {
+      "name": "Aura.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Aura.lua",
+      "size": 129554
+    },
+    {
+      "name": "Avensive.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Avensive.lua",
+      "size": 91402
+    },
+    {
+      "name": "Bloodlust.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Bloodlust.lua",
+      "size": 61788
+    },
+    {
+      "name": "Bloodstone.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Bloodstone.lua",
+      "size": 165319
+    },
+    {
+      "name": "Bloomtool.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Bloomtool.lua",
+      "size": 310469
+    },
+    {
+      "name": "Bluhgang.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Bluhgang.lua",
+      "size": 132296
+    },
+    {
+      "name": "Bolt.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Bolt.lua",
+      "size": 60551
+    },
+    {
+      "name": "Calypso.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Calypso.lua",
+      "size": 86828
+    },
+    {
+      "name": "Carinthia.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Carinthia.lua",
+      "size": 66215
+    },
+    {
+      "name": "Chernobyl.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Chernobyl.lua",
+      "size": 26574
+    },
+    {
+      "name": "CorsaResolver.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/CorsaResolver.lua",
+      "size": 6833
+    },
+    {
+      "name": "Dangerous.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Dangerous.lua",
+      "size": 522940
+    },
+    {
+      "name": "Dash.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Dash.lua",
+      "size": 66745
+    },
+    {
+      "name": "Dejavu.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Dejavu.lua",
+      "size": 173165
+    },
+    {
+      "name": "Divine.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Divine.lua",
+      "size": 121915
+    },
+    {
+      "name": "Drainyaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Drainyaw.lua",
+      "size": 540984
+    },
+    {
+      "name": "Ecstasy.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Ecstasy.lua",
+      "size": 202201
+    },
+    {
+      "name": "Elders.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Elders.lua",
+      "size": 138957
+    },
+    {
+      "name": "Elixir.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Elixir.lua",
+      "size": 119611
+    },
+    {
+      "name": "Emberlash.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Emberlash.lua",
+      "size": 102840
+    },
+    {
+      "name": "Emotional.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Emotional.lua",
+      "size": 69136
+    },
+    {
+      "name": "Enderphobia.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Enderphobia.lua",
+      "size": 85902
+    },
+    {
+      "name": "Enthusiasm.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Enthusiasm.lua",
+      "size": 114305
+    },
+    {
+      "name": "Ephoria.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Ephoria.lua",
+      "size": 527492
+    },
+    {
+      "name": "Eternity.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Eternity.lua",
+      "size": 206613
+    },
+    {
+      "name": "Etternace.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Etternace.lua",
+      "size": 73085
+    },
+    {
+      "name": "Everlast.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Everlast.lua",
+      "size": 128576
+    },
+    {
+      "name": "Excellent.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Excellent.lua",
+      "size": 100821
+    },
+    {
+      "name": "Exscord.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Exscord.lua",
+      "size": 95555
+    },
+    {
+      "name": "Feelsense.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Feelsense.lua",
+      "size": 107935
+    },
+    {
+      "name": "Flax-yaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Flax-yaw.lua",
+      "size": 60863
+    },
+    {
+      "name": "Genesis.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Genesis.lua",
+      "size": 79251
+    },
+    {
+      "name": "Genesisdump.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Genesisdump.lua",
+      "size": 287505
+    },
+    {
+      "name": "Gloriosa-pasted.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Gloriosa-pasted.lua",
+      "size": 110290
+    },
+    {
+      "name": "Halflife.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Halflife.lua",
+      "size": 155017
+    },
+    {
+      "name": "Helios.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Helios.lua",
+      "size": 173425
+    },
+    {
+      "name": "Hellyaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Hellyaw.lua",
+      "size": 369629
+    },
+    {
+      "name": "Hyperion.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Hyperion.lua",
+      "size": 89808
+    },
+    {
+      "name": "HysteriaDebug.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/HysteriaDebug.lua",
+      "size": 153533
+    },
+    {
+      "name": "INVINSIBLE.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/INVINSIBLE.lua",
+      "size": 79794
+    },
+    {
+      "name": "Inferno.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Inferno.lua",
+      "size": 134422
+    },
+    {
+      "name": "Infinixdump.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Infinixdump.lua",
+      "size": 526316
+    },
+    {
+      "name": "Interitus.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Interitus.lua",
+      "size": 125022
+    },
+    {
+      "name": "Jitterdev.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Jitterdev.lua",
+      "size": 255380
+    },
+    {
+      "name": "Kitten.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Kitten.lua",
+      "size": 130675
+    },
+    {
+      "name": "Kittyhook.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Kittyhook.lua",
+      "size": 106977
+    },
+    {
+      "name": "Komaru.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Komaru.lua",
+      "size": 133677
+    },
+    {
+      "name": "Lavender.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Lavender.lua",
+      "size": 184820
+    },
+    {
+      "name": "Leaf-recode.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Leaf-recode.lua",
+      "size": 176814
+    },
+    {
+      "name": "Leviatan.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Leviatan.lua",
+      "size": 127662
+    },
+    {
+      "name": "Lonely.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Lonely.lua",
+      "size": 283377
+    },
+    {
+      "name": "Lotus.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Lotus.lua",
+      "size": 85278
+    },
+    {
+      "name": "Luasense.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Luasense.lua",
+      "size": 73941
+    },
+    {
+      "name": "Mercury.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Mercury.lua",
+      "size": 83982
+    },
+    {
+      "name": "Metasetrecode.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Metasetrecode.lua",
+      "size": 175746
+    },
+    {
+      "name": "Mewtwotech.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Mewtwotech.lua",
+      "size": 375280
+    },
+    {
+      "name": "Mlc-yaw recode.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Mlc-yaw recode.lua",
+      "size": 95947
+    },
+    {
+      "name": "Model_changer.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Model_changer.lua",
+      "size": 6679
+    },
+    {
+      "name": "Moisten.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Moisten.lua",
+      "size": 260529
+    },
+    {
+      "name": "Momentum.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Momentum.lua",
+      "size": 128005
+    },
+    {
+      "name": "Myth.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Myth.lua",
+      "size": 101050
+    },
+    {
+      "name": "Mytools.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Mytools.lua",
+      "size": 79667
+    },
+    {
+      "name": "New hysteria.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/New hysteria.lua",
+      "size": 200573
+    },
+    {
+      "name": "Nighcore.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Nighcore.lua",
+      "size": 60892
+    },
+    {
+      "name": "Nyahook.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Nyahook.lua",
+      "size": 101869
+    },
+    {
+      "name": "Omegamoe.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Omegamoe.lua",
+      "size": 443593
+    },
+    {
+      "name": "Onesensedev.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Onesensedev.lua",
+      "size": 158094
+    },
+    {
+      "name": "Opulent.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Opulent.lua",
+      "size": 87079
+    },
+    {
+      "name": "Outlaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Outlaw.lua",
+      "size": 943950
+    },
+    {
+      "name": "Ozndump.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Ozndump.lua",
+      "size": 225963
+    },
+    {
+      "name": "Paradise.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Paradise.lua",
+      "size": 538418
+    },
+    {
+      "name": "Rebellion.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Rebellion.lua",
+      "size": 346163
+    },
+    {
+      "name": "Resolverx.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Resolverx.lua",
+      "size": 29127
+    },
+    {
+      "name": "Rinnegan.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Rinnegan.lua",
+      "size": 39645
+    },
+    {
+      "name": "Risen.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Risen.lua",
+      "size": 388254
+    },
+    {
+      "name": "Risennew.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Risennew.lua",
+      "size": 152243
+    },
+    {
+      "name": "Romance.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Romance.lua",
+      "size": 309929
+    },
+    {
+      "name": "Sanchez.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Sanchez.lua",
+      "size": 392181
+    },
+    {
+      "name": "Senkotech.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Senkotech.lua",
+      "size": 129581
+    },
+    {
+      "name": "Serenity.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Serenity.lua",
+      "size": 129095
+    },
+    {
+      "name": "Starlight.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Starlight.lua",
+      "size": 134812
+    },
+    {
+      "name": "Stellar.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Stellar.lua",
+      "size": 106436
+    },
+    {
+      "name": "Symmtest.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Symmtest.lua",
+      "size": 96960
+    },
+    {
+      "name": "Syphonic.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Syphonic.lua",
+      "size": 152486
+    },
+    {
+      "name": "Tabsense.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Tabsense.lua",
+      "size": 93201
+    },
+    {
+      "name": "Universe.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Universe.lua",
+      "size": 487926
+    },
+    {
+      "name": "Vandal.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Vandal.lua",
+      "size": 81967
+    },
+    {
+      "name": "Venco.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Venco.lua",
+      "size": 23026
+    },
+    {
+      "name": "Venus.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Venus.lua",
+      "size": 207649
+    },
+    {
+      "name": "Winter.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Winter.lua",
+      "size": 110625
+    },
+    {
+      "name": "Wraith.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Wraith.lua",
+      "size": 134466
+    },
+    {
+      "name": "Xo-yaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Xo-yaw.lua",
+      "size": 94586
+    },
+    {
+      "name": "Zephyrus.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Zephyrus.lua",
+      "size": 102781
+    },
+    {
+      "name": "Zov-yaw.lua",
+      "category": "Anti-aimbot scripts",
+      "relpath": "anti-aimbot/Zov-yaw.lua",
+      "size": 83302
+    },
+    {
+      "name": "Aimbot logs.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Aimbot logs.lua",
+      "size": 4221
+    },
+    {
+      "name": "Angelwings 2.6 debug.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Angelwings 2.6 debug.lua",
+      "size": 500358
+    },
+    {
+      "name": "Antarctica paste.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Antarctica paste.lua",
+      "size": 137245
+    },
+    {
+      "name": "Autobuy.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Autobuy.lua",
+      "size": 9134
+    },
+    {
+      "name": "Breakables ragebot.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Breakables ragebot.lua",
+      "size": 7150
+    },
+    {
+      "name": "Bullet tracers.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Bullet tracers.lua",
+      "size": 1268
+    },
+    {
+      "name": "Dormant aimbot.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Dormant aimbot.lua",
+      "size": 17338
+    },
+    {
+      "name": "Emberlash AA.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Emberlash AA.lua",
+      "size": 412252
+    },
+    {
+      "name": "Esp eagle.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Esp eagle.lua",
+      "size": 10620
+    },
+    {
+      "name": "Excellent cam.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Excellent cam.lua",
+      "size": 3873
+    },
+    {
+      "name": "Fakepitch exploit.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Fakepitch exploit.lua",
+      "size": 467
+    },
+    {
+      "name": "Fast ladder.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Fast ladder.lua",
+      "size": 24646
+    },
+    {
+      "name": "Fastleaks loader.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Fastleaks loader.lua",
+      "size": 34221
+    },
+    {
+      "name": "Glow health bar.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Glow health bar.lua",
+      "size": 9156
+    },
+    {
+      "name": "Hitsound enhanced.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Hitsound enhanced.lua",
+      "size": 8871
+    },
+    {
+      "name": "Hysteria debug.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Hysteria debug.lua",
+      "size": 153535
+    },
+    {
+      "name": "Lagcomp box.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Lagcomp box.lua",
+      "size": 9090
+    },
+    {
+      "name": "Luasense AA.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Luasense AA.lua",
+      "size": 235033
+    },
+    {
+      "name": "Nadehelper.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Nadehelper.lua",
+      "size": 179862
+    },
+    {
+      "name": "Neverlose hotkeys.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Neverlose hotkeys.lua",
+      "size": 361128
+    },
+    {
+      "name": "Scope overlay.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Scope overlay.lua",
+      "size": 3598
+    },
+    {
+      "name": "Simple jumpscout.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Simple jumpscout.lua",
+      "size": 462
+    },
+    {
+      "name": "Solix AA.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Solix AA.lua",
+      "size": 74896
+    },
+    {
+      "name": "Unsafe charge.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Unsafe charge.lua",
+      "size": 1681
+    },
+    {
+      "name": "Visual fog.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Visual fog.lua",
+      "size": 6854
+    },
+    {
+      "name": "Wraith beta.lua",
+      "category": "Global storage",
+      "relpath": "misc stuff/Wraith beta.lua",
+      "size": 166688
+    }
+  ]
+}
