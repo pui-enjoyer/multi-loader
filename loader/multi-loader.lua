@@ -831,7 +831,7 @@ end
 local current_items = {}
 local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload
 
-local AA_SEPARATOR = "Only one AA lua can be selected at once"
+local AA_SEPARATOR = "-- Only one AA lua can be selected"
 local NO_AA_LABEL  = "No AA script loaded*"
 
 local function is_separator(s)
