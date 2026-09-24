@@ -617,7 +617,41 @@ local crt = pcall(ffi.load, "msvcrt") and ffi.load("msvcrt") or nil
 local cached_ft = ffi.new("ml_FILETIME")
 local cached_fa = ffi.new("ml_WIN32_FA_DATA")
 
+local proxy_fa = nil
+local proxy_time = nil
+pcall(function()
+    local proxy = client.find_signature("client.dll", string.char(0x51, 0xC3))
+    local gm = client.find_signature("client.dll", string.char(0xC6, 0x06, 0x00, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x50))
+    local gp = client.find_signature("client.dll", string.char(0x50, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x85, 0xC0, 0x0F, 0x84, 0xCC, 0xCC, 0xCC, 0xCC, 0x6A, 0x00))
+    if proxy and gm and gp then
+        local gm_addr = ffi.cast("void***", ffi.cast("char*", gm) + 5)[0][0]
+        local gm_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, const char*)", proxy)
+        local gp_addr = ffi.cast("void***", ffi.cast("char*", gp) + 3)[0][0]
+        local gp_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, uintptr_t, const char*)", proxy)
+        local h_k32 = gm_proxy(gm_addr, "kernel32.dll")
+        if h_k32 and h_k32 ~= 0 then
+            local a_fa = gp_proxy(gp_addr, h_k32, "GetFileAttributesExA")
+            if a_fa and a_fa ~= 0 then
+                proxy_fa = ffi.cast("int (__stdcall*)(const char*, int, void*)", a_fa)
+            end
+            local a_time = gp_proxy(gp_addr, h_k32, "GetSystemTimeAsFileTime")
+            if a_time and a_time ~= 0 then
+                proxy_time = ffi.cast("void (__stdcall*)(void*)", a_time)
+            end
+        end
+    end
+end)
+
 local function unix_now()
+    if panorama and panorama.loadstring then
+        local ok, fn = pcall(panorama.loadstring, "return Math.floor(Date.now() / 1000)")
+        if ok and type(fn) == "function" then
+            local ok2, res = pcall(fn)
+            if ok2 and res and tonumber(res) and tonumber(res) > 1000000000 then
+                return tonumber(res)
+            end
+        end
+    end
     if crt and crt.time then
         local ok, t = pcall(crt.time, nil)
         if ok and t and tonumber(t) and tonumber(t) > 1000000000 then
@@ -627,6 +661,18 @@ local function unix_now()
     if k32 and k32.GetSystemTimeAsFileTime then
         local ok, res = pcall(function()
             k32.GetSystemTimeAsFileTime(cached_ft)
+            local hi = ffi.cast("uint64_t", cached_ft.hi)
+            local lo = ffi.cast("uint64_t", cached_ft.lo)
+            local t64 = hi * 4294967296ULL + lo
+            if t64 > 116444736000000000ULL then
+                return tonumber((t64 - 116444736000000000ULL) / 10000000ULL)
+            end
+        end)
+        if ok and res and res > 1000000000 then return res end
+    end
+    if proxy_time then
+        local ok, res = pcall(function()
+            proxy_time(cached_ft)
             local hi = ffi.cast("uint64_t", cached_ft.hi)
             local lo = ffi.cast("uint64_t", cached_ft.lo)
             local t64 = hi * 4294967296ULL + lo
@@ -668,7 +714,7 @@ local function file_mtime(s_name)
         "csgo/multi-loader/" .. s_name,
         "multi-loader/" .. s_name
     }
-    local fn = (k32 and k32.GetFileAttributesExA) or (ffi.C and pcall(function() return ffi.C.GetFileAttributesExA end) and ffi.C.GetFileAttributesExA)
+    local fn = (k32 and k32.GetFileAttributesExA) or proxy_fa or (ffi.C and pcall(function() return ffi.C.GetFileAttributesExA end) and ffi.C.GetFileAttributesExA)
     if not fn then return nil end
     for _, path in ipairs(candidates) do
         if path then
@@ -1620,7 +1666,7 @@ function fetch_scripts()
                 local folder = rel:match("^([^/]+)/") or "misc stuff"
                 local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
                 local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
-                local up = tonumber(item.updated_at) or tonumber(data.updated_at)
+                local up = tonumber(item.updated_at)
                 table.insert(new_s, sn)
                 new_u[sn] = du
                 new_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = up }
@@ -1843,76 +1889,6 @@ end
 
 local pending_time_requests = {}
 
-local function get_info_text()
-    if state.loading then
-        local step = math.floor((globals.realtime() - state.load_start) / 0.25) % 3 + 1
-        return "Loading" .. string.rep(".", step)
-    end
-    if not state.connected and #scripts == 0 then
-        return "Failed to connect: " .. state.err_code
-    end
-
-    local idx  = list:get()
-    local item = current_items[idx + 1]
-
-    if not item or item.type == "header" or item.type == "empty" then
-        local current_cat = category and category:get() or "Global storage"
-        local count = 0
-        for _, s in ipairs(scripts) do
-            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
-        end
-        return string.format("%d script%s available", count, count == 1 and "" or "s")
-    end
-
-    if item.type == "script" then
-        local s_name = item.name
-        local mtime  = file_mtime(s_name)
-
-        local gh_time = (script_meta[s_name] and script_meta[s_name].updated_at)
-        if not gh_time and database and database.read then
-            local db_t = database.read("multi_loader_gh_time_" .. s_name)
-            if db_t and type(db_t) == "number" and db_t > 1000000000 then
-                gh_time = db_t
-                if script_meta[s_name] then script_meta[s_name].updated_at = db_t end
-            end
-        end
-
-        if not gh_time then
-            request_script_time(s_name)
-        end
-
-        local t = nil
-        if mtime and gh_time then
-            t = (mtime > gh_time) and mtime or gh_time
-        elseif gh_time then
-            t = gh_time
-        elseif mtime then
-            t = mtime
-        end
-
-        if t and t > 1000000000 then
-            return fmt_ago("Updated", t)
-        elseif state.loading or pending_time_requests[s_name] then
-            return "Checking update time..."
-        else
-            return "Not updated"
-        end
-    elseif item.type == "preset" then
-        local p = item.data
-        local t = (p and p.updated_at) or (database and database.read and database.read("multi_loader_preset_updated_" .. item.name))
-        return t and fmt_ago("Updated", t) or "Not updated"
-    elseif item.type == "new_preset" then
-        return "Auto-loads selected scripts"
-    else
-        local current_cat = category and category:get() or "Global storage"
-        local count = 0
-        for _, s in ipairs(scripts) do
-            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
-        end
-        return string.format("%d script%s available", count, count == 1 and "" or "s")
-    end
-end
-
 local function request_script_time(s_name)
     if not s_name or s_name == "----" or s_name == "-" or pending_time_requests[s_name] then return end
     local rel = script_relpath and script_relpath[s_name]
@@ -1988,6 +1964,74 @@ local function request_script_time(s_name)
             end
         end)
     end)
+end
+
+local function get_info_text()
+    if state.loading then
+        local step = math.floor((globals.realtime() - state.load_start) / 0.25) % 3 + 1
+        return "Loading" .. string.rep(".", step)
+    end
+    if not state.connected and #scripts == 0 then
+        return "Failed to connect: " .. state.err_code
+    end
+
+    local idx  = list:get()
+    local item = current_items[idx + 1]
+
+    if not item or item.type == "header" or item.type == "empty" then
+        local current_cat = category and category:get() or "Global storage"
+        local count = 0
+        for _, s in ipairs(scripts) do
+            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
+        end
+        return string.format("%d script%s available", count, count == 1 and "" or "s")
+    end
+
+    if item.type == "script" then
+        local s_name = item.name
+        local mtime  = file_mtime(s_name)
+
+        local gh_time = (script_meta[s_name] and script_meta[s_name].updated_at)
+        if not gh_time and database and database.read then
+            local db_t = database.read("multi_loader_gh_time_" .. s_name)
+            if db_t and type(db_t) == "number" and db_t > 1000000000 then
+                gh_time = db_t
+                if script_meta[s_name] then script_meta[s_name].updated_at = db_t end
+            end
+        end
+
+        if not gh_time then
+            request_script_time(s_name)
+        end
+
+        local t = nil
+        if mtime and gh_time then
+            t = (mtime > gh_time) and mtime or gh_time
+        elseif gh_time then
+            t = gh_time
+        elseif mtime then
+            t = mtime
+        end
+
+        if t and t > 1000000000 then
+            return fmt_ago("Updated", t)
+        else
+            return "Checking update time..."
+        end
+    elseif item.type == "preset" then
+        local p = item.data
+        local t = (p and p.updated_at) or (database and database.read and database.read("multi_loader_preset_updated_" .. item.name))
+        return t and fmt_ago("Updated", t) or "Not updated"
+    elseif item.type == "new_preset" then
+        return "Auto-loads selected scripts"
+    else
+        local current_cat = category and category:get() or "Global storage"
+        local count = 0
+        for _, s in ipairs(scripts) do
+            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
+        end
+        return string.format("%d script%s available", count, count == 1 and "" or "s")
+    end
 end
 
 local was_new = false
