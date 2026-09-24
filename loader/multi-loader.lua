@@ -1,5 +1,3 @@
--- multi-loader by alaraks
--- github.com/pui-enjoyer/multi-loader
 
 if rawget(_G, "org_delay_call") and type(rawget(_G, "org_delay_call")) == "function" then
     client.delay_call = rawget(_G, "org_delay_call")
