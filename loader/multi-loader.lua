@@ -611,22 +611,24 @@ pcall(ffi.cdef, [[
     void __stdcall GetSystemTimeAsFileTime(ml_FILETIME* ft);
 ]])
 
+local cached_ft = ffi.new("ml_FILETIME")
+local cached_fa = ffi.new("ml_WIN32_FA_DATA")
+
 local function unix_now()
+    if os and os.time then
+        local ok, t = pcall(os.time)
+        if ok and t and t > 1000000000 then return t end
+    end
     local ok, res = pcall(function()
-        local ft = ffi.new("ml_FILETIME")
-        ffi.C.GetSystemTimeAsFileTime(ft)
-        local hi = ffi.cast("uint64_t", ft.hi)
-        local lo = ffi.cast("uint64_t", ft.lo)
+        ffi.C.GetSystemTimeAsFileTime(cached_ft)
+        local hi = ffi.cast("uint64_t", cached_ft.hi)
+        local lo = ffi.cast("uint64_t", cached_ft.lo)
         local t64 = hi * 4294967296ULL + lo
         if t64 > 116444736000000000ULL then
             return tonumber((t64 - 116444736000000000ULL) / 10000000ULL)
         end
     end)
     if ok and res and res > 0 then return res end
-    if os and os.time then
-        local ok2, t = pcall(os.time)
-        if ok2 and t and t > 0 then return t end
-    end
     return math.floor(globals.realtime())
 end
 
@@ -648,25 +650,19 @@ local function file_mtime(s_name)
     local candidates = {
         rel and ("csgo/multi-loader/" .. rel),
         rel and ("multi-loader/" .. rel),
-        rel and ("G:/multi-loader-repo/scripts/" .. rel),
         "csgo/multi-loader/misc stuff/" .. s_name,
         "csgo/multi-loader/anti-aimbot/" .. s_name,
         "multi-loader/misc stuff/" .. s_name,
         "multi-loader/anti-aimbot/" .. s_name,
-        "G:/multi-loader-repo/scripts/misc stuff/" .. s_name,
-        "G:/multi-loader-repo/scripts/anti-aimbot/" .. s_name,
         "csgo/multi-loader/" .. s_name,
-        "multi-loader/" .. s_name,
-        s_name,
-        "csgo/" .. s_name
+        "multi-loader/" .. s_name
     }
     for _, path in ipairs(candidates) do
         if path then
             local ok, res = pcall(function()
-                local d = ffi.new("ml_WIN32_FA_DATA")
-                if ffi.C.GetFileAttributesExA(path, 0, d) ~= 0 then
-                    local hi = ffi.cast("uint64_t", d.wtime.hi)
-                    local lo = ffi.cast("uint64_t", d.wtime.lo)
+                if ffi.C.GetFileAttributesExA(path, 0, cached_fa) ~= 0 then
+                    local hi = ffi.cast("uint64_t", cached_fa.wtime.hi)
+                    local lo = ffi.cast("uint64_t", cached_fa.wtime.lo)
                     if hi > 0ULL or lo > 0ULL then
                         local ft = hi * 4294967296ULL + lo
                         if ft > 116444736000000000ULL then
@@ -1338,12 +1334,14 @@ function load_script(s_name, silent)
                         ensure_dir("multi-loader/anti-aimbot")
                         if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
                         local now = unix_now()
-                        script_file_times[s_name] = now
+                        local script_up = (meta and meta.updated_at) or repo_updated_at or now
+                        script_file_times[s_name] = script_up
                         if database and database.write then
                             if meta and meta.sha then pcall(database.write, "multi_loader_sha_" .. s_name, meta.sha) end
-                            pcall(database.write, "multi_loader_size_"    .. s_name, #resp.body)
-                            pcall(database.write, "multi_loader_lines_"   .. s_name, new_ln)
-                            pcall(database.write, "multi_loader_updated_" .. s_name, now)
+                            pcall(database.write, "multi_loader_size_"       .. s_name, #resp.body)
+                            pcall(database.write, "multi_loader_lines_"      .. s_name, new_ln)
+                            pcall(database.write, "multi_loader_updated_"    .. s_name, script_up)
+                            pcall(database.write, "multi_loader_downloaded_" .. s_name, now)
                             if database.flush then pcall(database.flush) end
                         end
                         client.log(string.format("[multi-loader] Updated %s (%d bytes, %d lines)", s_name, #resp.body, new_ln))
@@ -1376,12 +1374,14 @@ function load_script(s_name, silent)
                 ensure_dir("multi-loader/anti-aimbot")
                 if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
                 local now = unix_now()
-                script_file_times[s_name] = now
+                local script_up = (meta and meta.updated_at) or repo_updated_at or now
+                script_file_times[s_name] = script_up
                 if database and database.write then
                     if meta and meta.sha then pcall(database.write, "multi_loader_sha_" .. s_name, meta.sha) end
-                    pcall(database.write, "multi_loader_size_"    .. s_name, #resp.body)
-                    pcall(database.write, "multi_loader_lines_"   .. s_name, new_ln)
-                    pcall(database.write, "multi_loader_updated_" .. s_name, now)
+                    pcall(database.write, "multi_loader_size_"       .. s_name, #resp.body)
+                    pcall(database.write, "multi_loader_lines_"      .. s_name, new_ln)
+                    pcall(database.write, "multi_loader_updated_"    .. s_name, script_up)
+                    pcall(database.write, "multi_loader_downloaded_" .. s_name, now)
                     if database.flush then pcall(database.flush) end
                 end
                 client.log(string.format("[multi-loader] Saved %s (%d bytes, %d lines)", s_name, #resp.body, new_ln))
@@ -1589,6 +1589,13 @@ function fetch_scripts()
             return false
         end
 
+        if data.updated_at and tonumber(data.updated_at) then
+            repo_updated_at = tonumber(data.updated_at)
+            if database and database.write then
+                pcall(database.write, "multi_loader_repo_time", repo_updated_at)
+            end
+        end
+
         local new_s, new_u, new_m = {}, {}, {}
         local new_c, new_r = {}, {}
 
@@ -1600,9 +1607,10 @@ function fetch_scripts()
                 local folder = rel:match("^([^/]+)/") or "misc stuff"
                 local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
                 local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+                local up = tonumber(item.updated_at) or tonumber(data.updated_at)
                 table.insert(new_s, sn)
                 new_u[sn] = du
-                new_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = nil }
+                new_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = up }
                 new_c[sn] = cat
                 new_r[sn] = rel
             end
@@ -1620,14 +1628,15 @@ function fetch_scripts()
         return false
     end
 
-    local raw_manifest_url = "https://raw.githubusercontent.com/" .. repo .. "/main/manifest.json"
+    local cache_buster = "?v=" .. unix_now()
+    local raw_manifest_url = "https://raw.githubusercontent.com/" .. repo .. "/main/manifest.json" .. cache_buster
     http.get(raw_manifest_url, function(ok, resp)
         if ok and resp.status == 200 then
             local ok2, data = pcall(json.parse, resp.body)
             if ok2 and apply_manifest(data) then return end
         end
 
-        local cdn_manifest_url = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/manifest.json"
+        local cdn_manifest_url = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/manifest.json" .. cache_buster
         http.get(cdn_manifest_url, function(ok2, resp2)
             if ok2 and resp2.status == 200 then
                 local ok3, data2 = pcall(json.parse, resp2.body)
@@ -1641,6 +1650,7 @@ function fetch_scripts()
                     if ok4 and type(data3) == "table" and type(data3.tree) == "table" then
                         local found_s, found_u, found_m = {}, {}, {}
                         local found_c, found_r = {}, {}
+                        local fallback_up = repo_updated_at or (database and database.read and database.read("multi_loader_repo_time"))
                         for _, item in ipairs(data3.tree) do
                             if item.type == "blob" and item.path and item.path:find("%.lua$") then
                                 local folder, sn = item.path:match("^scripts/([^/]+)/(.+%.lua)$")
@@ -1655,9 +1665,10 @@ function fetch_scripts()
                                     local rel = folder .. "/" .. sn
                                     local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
                                     local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+                                    local prev_up = script_meta[sn] and script_meta[sn].updated_at
                                     table.insert(found_s, sn)
                                     found_u[sn] = du
-                                    found_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = nil }
+                                    found_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = prev_up or fallback_up }
                                     found_c[sn] = cat
                                     found_r[sn] = rel
                                 end
@@ -1798,7 +1809,18 @@ local function fmt_ago(prefix, t)
         return string.format("%s %d hour%s ago", prefix, h, h == 1 and "" or "s")
     else
         local d = math.floor(sec / 86400)
-        return string.format("%s %d day%s ago", prefix, d, d == 1 and "" or "s")
+        if d < 7 then
+            return string.format("%s %d day%s ago", prefix, d, d == 1 and "" or "s")
+        elseif d < 30 then
+            local w = math.floor(d / 7)
+            return string.format("%s %d week%s ago", prefix, w, w == 1 and "" or "s")
+        elseif d < 365 then
+            local mo = math.floor(d / 30)
+            return string.format("%s %d month%s ago", prefix, mo, mo == 1 and "" or "s")
+        else
+            local y = math.floor(d / 365)
+            return string.format("%s %d year%s ago", prefix, y, y == 1 and "" or "s")
+        end
     end
 end
 
@@ -1824,21 +1846,26 @@ local function get_info_text()
     end
 
     if item.type == "script" then
-        local mtime = file_mtime(item.name)
-        if mtime then
-            return fmt_ago("Updated", mtime)
+        local meta = script_meta[item.name]
+        local t = meta and meta.updated_at
+        if not t and database and database.read then
+            t = database.read("multi_loader_updated_" .. item.name)
         end
-        local t = (script_meta[item.name] and script_meta[item.name].updated_at)
-               or (database and database.read and database.read("multi_loader_updated_" .. item.name))
-               or repo_updated_at
-               or (database and database.read and database.read("multi_loader_repo_time"))
-               or script_file_times[item.name]
-        if t then
+        local mtime = file_mtime(item.name)
+        if mtime and (not t or mtime > t) then
+            t = mtime
+        end
+        if not t then
+            t = repo_updated_at
+             or (database and database.read and database.read("multi_loader_repo_time"))
+             or script_file_times[item.name]
+        end
+        if t and t > 0 then
             return fmt_ago("Updated", t)
         elseif state.loading then
             return "Checking update time..."
         else
-            return "Not downloaded"
+            return "Not updated"
         end
     elseif item.type == "preset" then
         local p = item.data
@@ -1857,6 +1884,7 @@ local function get_info_text()
 end
 
 local was_new = false
+local last_info = ""
 
 function update_vis()
     local idx  = list:get()
@@ -1870,11 +1898,8 @@ function update_vis()
     end
 
     if not item or item.type == "error" or item.type == "empty" then
-        if item and item.type == "empty" then
-            info:set("Category is empty")
-        else
-            info:set("Failed to connect: " .. state.err_code)
-        end
+        local err_txt = (item and item.type == "empty") and "Category is empty" or ("Failed to connect: " .. state.err_code)
+        if err_txt ~= last_info then last_info = err_txt; info:set(err_txt) end
         btn_load_script:set_visible(false); btn_unload_script:set_visible(false)
         btn_load_preset:set_visible(false); btn_unload_preset:set_visible(false)
         btn_delete_preset:set_visible(false); edit_preset_scripts:set_visible(false)
@@ -1885,7 +1910,8 @@ function update_vis()
         return
     end
 
-    info:set(get_info_text())
+    local txt = get_info_text()
+    if txt ~= last_info then last_info = txt; info:set(txt) end
 
     local is_new    = (item.type == "new_preset")
     local is_script = (item.type == "script")
@@ -2018,7 +2044,6 @@ reload:set_callback(function()
     end
 end)
 
-local last_info      = ""
 local last_step      = -1
 local last_sec       = -1
 local last_sel       = -1
