@@ -1,7 +1,7 @@
 --- const
 local OBEX = obex_fetch and obex_fetch() or {
     discord = "unknown",
-    username = "multi-loader",
+    username = "admin",
     build = "beta"
 }
 
