@@ -769,9 +769,9 @@ do
 
     local default_aa_scripts = {
         "AcatelBeta.lua", "Acidtech.lua", "Aesthetic.lua", "Aimtools.lua",
-        "Alien.lua", "Alpha_gs.lua", "AlphaBuild.lua", "Alucard.lua",
+        "Alien.lua", "Alpha_gs.lua", "AlphaBuild.lua",
         "Ambani.lua", "Amina-yaw.lua", "Amnesia.lua", "Amphibia.lua",
-        "Ancient.lua", "Angelwings.lua", "Angelwingsfixxxxlasttt.lua", "Annesty.lua",
+        "Angelwings.lua", "Angelwingsfixxxxlasttt.lua", "Annesty.lua",
         "Anoflow.lua", "Antarcticareborn.lua", "Astra.lua", "Aura.lua",
         "Avensive.lua", "Bloodlust.lua", "Bloodstone.lua", "Bloomtool.lua",
         "Bluhgang.lua", "Bolt.lua", "Calypso.lua", "Carinthia.lua",
@@ -851,7 +851,7 @@ if database and database.read then
 end
 
 local current_items = {}
-local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload
+local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload, precalculate_local_times
 
 local AA_SEPARATOR = "-- Only one AA lua can be selected"
 local NO_AA_LABEL  = "No AA script loaded*"
@@ -1527,6 +1527,7 @@ end
 
 local function finish_fetch()
     table.sort(scripts, function(a, b) return a:lower() < b:lower() end)
+    if precalculate_local_times then precalculate_local_times() end
 
     if #scripts >= 50 and database and database.write then
         local aa_cnt = 0
@@ -1891,6 +1892,32 @@ local function file_mtime(s_name)
     return nil
 end
 
+precalculate_local_times = function()
+    for _, sn in ipairs(scripts) do
+        if not (is_separator and is_separator(sn)) then
+            if not script_file_times[sn] and winapi and winapi.get_file_mtime then
+                local mt = file_mtime(sn)
+                if mt and mt > 1000000000 then
+                    script_file_times[sn] = mt
+                end
+            end
+            if not (script_meta[sn] and script_meta[sn].updated_at) and database and database.read then
+                local db_t = database.read("multi_loader_gh_time_" .. sn)
+                if db_t and type(db_t) == "number" and db_t > 1000000000 then
+                    if not script_meta[sn] then script_meta[sn] = {} end
+                    script_meta[sn].updated_at = db_t
+                else
+                    local saved_up = database.read("multi_loader_updated_" .. sn)
+                    if saved_up and type(saved_up) == "number" and saved_up > 1000000000 then
+                        if not script_meta[sn] then script_meta[sn] = {} end
+                        script_meta[sn].updated_at = saved_up
+                    end
+                end
+            end
+        end
+    end
+end
+
 local pending_time_requests = {}
 local get_info_text = nil
 local request_script_time = nil
@@ -2014,7 +2041,10 @@ get_info_text = function()
 
     if item.type == "script" then
         local s_name = item.name
-        local mtime  = file_mtime(s_name)
+        local mtime  = script_file_times[s_name] or file_mtime(s_name)
+        if mtime and not script_file_times[s_name] then
+            script_file_times[s_name] = mtime
+        end
 
         local gh_time = (script_meta[s_name] and script_meta[s_name].updated_at)
         if not gh_time and database and database.read then
@@ -2023,10 +2053,6 @@ get_info_text = function()
                 gh_time = db_t
                 if script_meta[s_name] then script_meta[s_name].updated_at = db_t end
             end
-        end
-
-        if not gh_time and request_script_time then
-            request_script_time(s_name)
         end
 
         local t = nil
@@ -2045,10 +2071,12 @@ get_info_text = function()
             end
         end
 
+        if not t and request_script_time then
+            request_script_time(s_name)
+        end
+
         if t and t > 1000000000 then
             return fmt_ago("Updated", t)
-        elseif pending_time_requests[s_name] then
-            return "Checking update time..."
         elseif repo_updated_at and repo_updated_at > 1000000000 then
             return fmt_ago("Updated", repo_updated_at)
         else
@@ -2273,6 +2301,7 @@ if menu_color_ref then
 end
 
 update_list()
+if precalculate_local_times then precalculate_local_times() end
 fetch_scripts()
 
 real_set_event_cb("shutdown", function()
