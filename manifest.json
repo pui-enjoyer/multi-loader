@@ -682,157 +682,157 @@
     {
       "name": "Aimbot logs.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Aimbot logs.lua",
+      "relpath": "other/Aimbot logs.lua",
       "size": 4221
     },
     {
       "name": "Angelwings 2.6 debug.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Angelwings 2.6 debug.lua",
+      "relpath": "other/Angelwings 2.6 debug.lua",
       "size": 500358
     },
     {
       "name": "Antarctica paste.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Antarctica paste.lua",
+      "relpath": "other/Antarctica paste.lua",
       "size": 137245
     },
     {
       "name": "Autobuy.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Autobuy.lua",
+      "relpath": "other/Autobuy.lua",
       "size": 9134
     },
     {
       "name": "Breakables ragebot.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Breakables ragebot.lua",
+      "relpath": "other/Breakables ragebot.lua",
       "size": 7150
     },
     {
       "name": "Bullet tracers.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Bullet tracers.lua",
+      "relpath": "other/Bullet tracers.lua",
       "size": 1268
     },
     {
       "name": "Dormant aimbot.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Dormant aimbot.lua",
+      "relpath": "other/Dormant aimbot.lua",
       "size": 17338
     },
     {
       "name": "Emberlash AA.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Emberlash AA.lua",
+      "relpath": "other/Emberlash AA.lua",
       "size": 412252
     },
     {
       "name": "Esp eagle.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Esp eagle.lua",
+      "relpath": "other/Esp eagle.lua",
       "size": 10620
     },
     {
       "name": "Excellent cam.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Excellent cam.lua",
+      "relpath": "other/Excellent cam.lua",
       "size": 3873
     },
     {
       "name": "Fakepitch exploit.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Fakepitch exploit.lua",
+      "relpath": "other/Fakepitch exploit.lua",
       "size": 467
     },
     {
       "name": "Fast ladder.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Fast ladder.lua",
+      "relpath": "other/Fast ladder.lua",
       "size": 24646
     },
     {
       "name": "Fastleaks loader.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Fastleaks loader.lua",
+      "relpath": "other/Fastleaks loader.lua",
       "size": 34221
     },
     {
       "name": "Glow health bar.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Glow health bar.lua",
+      "relpath": "other/Glow health bar.lua",
       "size": 9156
     },
     {
       "name": "Hitsound enhanced.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Hitsound enhanced.lua",
+      "relpath": "other/Hitsound enhanced.lua",
       "size": 8871
     },
     {
       "name": "Hysteria debug.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Hysteria debug.lua",
+      "relpath": "other/Hysteria debug.lua",
       "size": 153535
     },
     {
       "name": "Lagcomp box.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Lagcomp box.lua",
+      "relpath": "other/Lagcomp box.lua",
       "size": 9090
     },
     {
       "name": "Luasense AA.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Luasense AA.lua",
+      "relpath": "other/Luasense AA.lua",
       "size": 235033
     },
     {
       "name": "Nadehelper.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Nadehelper.lua",
+      "relpath": "other/Nadehelper.lua",
       "size": 179862
     },
     {
       "name": "Neverlose hotkeys.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Neverlose hotkeys.lua",
+      "relpath": "other/Neverlose hotkeys.lua",
       "size": 361128
     },
     {
       "name": "Scope overlay.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Scope overlay.lua",
+      "relpath": "other/Scope overlay.lua",
       "size": 3598
     },
     {
       "name": "Simple jumpscout.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Simple jumpscout.lua",
+      "relpath": "other/Simple jumpscout.lua",
       "size": 462
     },
     {
       "name": "Solix AA.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Solix AA.lua",
+      "relpath": "other/Solix AA.lua",
       "size": 74896
     },
     {
       "name": "Unsafe charge.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Unsafe charge.lua",
+      "relpath": "other/Unsafe charge.lua",
       "size": 1681
     },
     {
       "name": "Visual fog.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Visual fog.lua",
+      "relpath": "other/Visual fog.lua",
       "size": 6854
     },
     {
       "name": "Wraith beta.lua",
       "category": "Global storage",
-      "relpath": "misc stuff/Wraith beta.lua",
+      "relpath": "other/Wraith beta.lua",
       "size": 166688
     }
   ]
