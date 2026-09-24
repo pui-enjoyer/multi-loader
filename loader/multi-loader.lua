@@ -772,7 +772,7 @@ do
         "Alien.lua", "Alpha_gs.lua", "AlphaBuild.lua",
         "Ambani.lua", "Amina-yaw.lua", "Amnesia.lua", "Amphibia.lua",
         "Angelwings.lua", "Angelwingsfixxxxlasttt.lua", "Annesty.lua",
-        "Anoflow.lua", "Antarcticareborn.lua", "Astra.lua", "Aura.lua",
+        "Astra.lua", "Aura.lua",
         "Avensive.lua", "Bloodlust.lua", "Bloodstone.lua", "Bloomtool.lua",
         "Bluhgang.lua", "Bolt.lua", "Calypso.lua", "Carinthia.lua",
         "Chernobyl.lua", "CorsaResolver.lua", "Dangerous.lua", "Dash.lua",
@@ -796,7 +796,6 @@ do
         "Stellar.lua", "Symmtest.lua", "Syphonic.lua", "Tabsense.lua",
         "Universe.lua", "Vandal.lua", "Venco.lua", "Venus.lua",
         "Winter.lua", "Wraith.lua", "Xo-yaw.lua", "Zephyrus.lua",
-        "Zov-yaw.lua",
     }
 
     for _, sn in ipairs(default_global_scripts) do

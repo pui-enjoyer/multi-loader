@@ -1,5 +1,5 @@
 ﻿{
-    "count":  134,
+    "count":  129,
     "scripts":  [
                     {
                         "name":  "Acidtech.lua",
@@ -58,38 +58,10 @@
                         "updated_at":  1790000657
                     },
                     {
-                        "name":  "Angelwings.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Angelwings.lua",
-                        "size":  98128,
-                        "updated_at":  1790000657
-                    },
-                    {
-                        "name":  "Angelwingsfixxxxlasttt.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Angelwingsfixxxxlasttt.lua",
-                        "size":  500432,
-                        "updated_at":  1790000657
-                    },
-                    {
                         "name":  "Annesty.lua",
                         "category":  "Anti-aimbot scripts",
                         "relpath":  "anti-aimbot/Annesty.lua",
                         "size":  122933,
-                        "updated_at":  1790000657
-                    },
-                    {
-                        "name":  "Anoflow.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Anoflow.lua",
-                        "size":  285682,
-                        "updated_at":  1790000657
-                    },
-                    {
-                        "name":  "Antarcticareborn.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Antarcticareborn.lua",
-                        "size":  138128,
                         "updated_at":  1790000657
                     },
                     {
@@ -748,13 +720,6 @@
                         "category":  "Anti-aimbot scripts",
                         "relpath":  "anti-aimbot/Zephyrus.lua",
                         "size":  102781,
-                        "updated_at":  1790000657
-                    },
-                    {
-                        "name":  "Zov-yaw.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Zov-yaw.lua",
-                        "size":  83302,
                         "updated_at":  1790000657
                     },
                     {
