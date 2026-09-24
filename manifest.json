@@ -1,13 +1,6 @@
 ﻿{
-    "count":  139,
+    "count":  134,
     "scripts":  [
-                    {
-                        "name":  "AcatelBeta.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/AcatelBeta.lua",
-                        "size":  200817,
-                        "updated_at":  1790000002
-                    },
                     {
                         "name":  "Acidtech.lua",
                         "category":  "Anti-aimbot scripts",
@@ -37,27 +30,6 @@
                         "updated_at":  1790000657
                     },
                     {
-                        "name":  "AlphaBuild.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/AlphaBuild.lua",
-                        "size":  143920,
-                        "updated_at":  1790000002
-                    },
-                    {
-                        "name":  "Alpha_gs.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Alpha_gs.lua",
-                        "size":  94586,
-                        "updated_at":  1790000657
-                    },
-                    {
-                        "name":  "Alucard.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Alucard.lua",
-                        "size":  52594,
-                        "updated_at":  1790000657
-                    },
-                    {
                         "name":  "Ambani.lua",
                         "category":  "Anti-aimbot scripts",
                         "relpath":  "anti-aimbot/Ambani.lua",
@@ -83,13 +55,6 @@
                         "category":  "Anti-aimbot scripts",
                         "relpath":  "anti-aimbot/Amphibia.lua",
                         "size":  96471,
-                        "updated_at":  1790000657
-                    },
-                    {
-                        "name":  "Ancient.lua",
-                        "category":  "Anti-aimbot scripts",
-                        "relpath":  "anti-aimbot/Ancient.lua",
-                        "size":  149973,
                         "updated_at":  1790000657
                     },
                     {
