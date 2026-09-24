@@ -1888,8 +1888,10 @@ local function fmt_ago(prefix, t)
 end
 
 local pending_time_requests = {}
+local get_info_text
+local request_script_time
 
-local function request_script_time(s_name)
+request_script_time = function(s_name)
     if not s_name or s_name == "----" or s_name == "-" or pending_time_requests[s_name] then return end
     local rel = script_relpath and script_relpath[s_name]
     if not rel then return end
@@ -1966,7 +1968,7 @@ local function request_script_time(s_name)
     end)
 end
 
-local function get_info_text()
+get_info_text = function()
     if state.loading then
         local step = math.floor((globals.realtime() - state.load_start) / 0.25) % 3 + 1
         return "Loading" .. string.rep(".", step)
