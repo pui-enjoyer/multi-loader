@@ -669,7 +669,27 @@ do
         "Visual fog.lua", "Wraith beta.lua",
     }
 
-    local default_aa_scripts = {}
+    local default_aa_scripts = {
+        "Acidtech.lua", "Aesthetic.lua", "Aimtools.lua", "Alien.lua", "Ambani.lua",
+        "Amina-yaw.lua", "Amnesia.lua", "Amphibia.lua", "Annesty.lua", "Bloomtool.lua",
+        "Bluhgang.lua", "Chernobyl.lua", "Dangerous.lua", "Dash.lua", "Dejavu.lua",
+        "Divine.lua", "Drainyaw.lua", "Ecstasy.lua", "Elders.lua", "Elixir.lua",
+        "Emberlash.lua", "Enderphobia.lua", "Enthusiasm.lua", "Ephoria.lua", "Eternity.lua",
+        "Etternace.lua", "Everlast.lua", "Excellent.lua", "Exscord.lua", "Feelsense.lua",
+        "Flax-yaw.lua", "Genesis.lua", "Genesisdump.lua", "Gloriosa-pasted.lua", "Halflife.lua",
+        "Helios.lua", "Hellyaw.lua", "Hyperion.lua", "HysteriaDebug.lua", "INVINSIBLE.lua",
+        "Inferno.lua", "Infinixdump.lua", "Interitus.lua", "Jitterdev.lua", "Kitten.lua",
+        "Kittyhook.lua", "Komaru.lua", "Lavender.lua", "Leaf-recode.lua", "Leviatan.lua",
+        "Lonely.lua", "Lotus.lua", "Luasense.lua", "Mercury.lua", "Metasetrecode.lua",
+        "Mewtwotech.lua", "Mlc-yaw recode.lua", "Model_changer.lua", "Moisten.lua", "Momentum.lua",
+        "Myth.lua", "Mytools.lua", "New hysteria.lua", "Nighcore.lua", "Nyahook.lua",
+        "Omegamoe.lua", "Onesensedev.lua", "Opulent.lua", "Outlaw.lua", "Ozndump.lua",
+        "Paradise.lua", "Rebellion.lua", "Resolverx.lua", "Rinnegan.lua", "Risen.lua",
+        "Risennew.lua", "Romance.lua", "Sanchez.lua", "Senkotech.lua", "Serenity.lua",
+        "Starlight.lua", "Stellar.lua", "Symmtest.lua", "Syphonic.lua", "Tabsense.lua",
+        "Universe.lua", "Vandal.lua", "Venco.lua", "Venus.lua", "Wraith.lua",
+        "Xo-yaw.lua",
+    }
 
     for _, sn in ipairs(default_global_scripts) do
         local rel = "other/" .. sn
