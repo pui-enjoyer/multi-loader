@@ -14,7 +14,7 @@ local real_client = client
 local real_delay_call = client.delay_call
 local real_set_event_cb = client.set_event_callback
 local real_unset_event_cb = client.unset_event_callback
-local real_log = client.log
+local real_log = function() end
 local real_ui = ui
 local real_set_visible = ui.set_visible
 local real_set_enabled = ui.set_enabled
@@ -1291,7 +1291,6 @@ local function execute(body, s_name, silent)
 
     local fn, err = real_loadstring(body, s_name)
     if not fn then
-        client.log("[multi-loader] compile error in " .. s_name .. ": " .. tostring(err))
         loaded[s_name] = nil
         if not silent then update_list(); update_vis() end
         return false
@@ -1310,7 +1309,6 @@ local function execute(body, s_name, silent)
     rt.ctx     = prev_c
 
     if not ok then
-        client.log("[multi-loader] Runtime error in " .. s_name .. ": " .. tostring(run_err))
         unload_script(s_name, true)
         loaded[s_name] = nil
         if not silent then update_list(); update_vis() end
@@ -1384,7 +1382,6 @@ function load_script(s_name, silent)
             end
 
             if differs then
-                client.log("[multi-loader] " .. s_name .. " differs on repo, updating...")
                 http_get(s_name, function(ok, resp)
                     if ok and resp.status == 200 then
                         local new_ln = count_lines(resp.body)
@@ -1403,10 +1400,8 @@ function load_script(s_name, silent)
                             pcall(database.write, "multi_loader_downloaded_" .. s_name, now)
                             if database.flush then pcall(database.flush) end
                         end
-                        client.log(string.format("[multi-loader] Updated %s (%d bytes, %d lines)", s_name, #resp.body, new_ln))
                         execute(resp.body, s_name, silent)
                     else
-                        client.log("[multi-loader] Failed to update " .. s_name .. ", using local copy")
                         if local_raw then execute(local_raw, s_name, silent)
                         else
                             loaded[s_name] = nil
@@ -1415,14 +1410,11 @@ function load_script(s_name, silent)
                     end
                 end)
             else
-                client.log(string.format("[multi-loader] Loading local %s (%d bytes, %d lines)", s_name, local_sz, local_ln))
                 execute(local_raw, s_name, silent)
             end
         else
-            client.log("[multi-loader] Downloading " .. s_name .. " to local storage...")
             http_get(s_name, function(ok, resp)
                 if not ok or resp.status ~= 200 then
-                    client.log("[multi-loader] Failed to download " .. s_name)
                     loaded[s_name] = nil
                     if not silent then update_list() end
                     return
@@ -1443,7 +1435,6 @@ function load_script(s_name, silent)
                     pcall(database.write, "multi_loader_downloaded_" .. s_name, now)
                     if database.flush then pcall(database.flush) end
                 end
-                client.log(string.format("[multi-loader] Saved %s (%d bytes, %d lines)", s_name, #resp.body, new_ln))
                 execute(resp.body, s_name, silent)
             end)
         end
@@ -1452,10 +1443,8 @@ function load_script(s_name, silent)
             if ok and resp.status == 200 then
                 execute(resp.body, s_name, silent)
             elseif local_raw then
-                client.log("[multi-loader] Remote failed, using local " .. s_name)
                 execute(local_raw, s_name, silent)
             else
-                client.log("[multi-loader] Failed to load " .. s_name)
                 loaded[s_name] = nil
                 if not silent then update_list() end
             end
