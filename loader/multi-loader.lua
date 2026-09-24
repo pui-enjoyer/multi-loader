@@ -601,74 +601,6 @@ if not readfile or not writefile then
     end)
 end
 
-pcall(ffi.cdef, [[
-    typedef struct { uint32_t lo; uint32_t hi; } ml_FILETIME;
-    typedef struct {
-        uint32_t   attrs;
-        ml_FILETIME ctime; ml_FILETIME atime; ml_FILETIME wtime;
-        uint32_t   size_hi; uint32_t size_lo;
-    } ml_WIN32_FA_DATA;
-]])
-
-local cached_ft = ffi.new("ml_FILETIME")
-local cached_fa = ffi.new("ml_WIN32_FA_DATA")
-
-local winapi = {
-    get_file_mtime = nil,
-    get_system_time = nil,
-}
-
-pcall(function()
-    local proxy_addr = client.find_signature("client.dll", string.char(0x51, 0xC3))
-    local gm_patern = client.find_signature("client.dll", string.char(0xC6, 0x06, 0x00, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x50))
-    local gp_patern = client.find_signature("client.dll", string.char(0x50, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x85, 0xC0, 0x0F, 0x84, 0xCC, 0xCC, 0xCC, 0xCC, 0x6A, 0x00))
-    if not (proxy_addr and gm_patern and gp_patern) then return end
-
-    local gm_addr = ffi.cast("void***", ffi.cast("char*", gm_patern) + 5)[0][0]
-    local gm_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, const char*)", proxy_addr)
-
-    local gp_addr = ffi.cast("void***", ffi.cast("char*", gp_patern) + 3)[0][0]
-    local gp_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, uintptr_t, const char*)", proxy_addr)
-
-    local h_k32 = gm_proxy(gm_addr, "kernel32.dll")
-    if not h_k32 or h_k32 == 0 then return end
-
-    local a_fa = gp_proxy(gp_addr, h_k32, "GetFileAttributesExA")
-    if a_fa and a_fa ~= 0 then
-        local proxy_fa = ffi.cast("int (__thiscall*)(uintptr_t, const char*, int, void*)", proxy_addr)
-        winapi.get_file_mtime = function(path)
-            if not path then return nil end
-            local ok, ret = pcall(proxy_fa, a_fa, path, 0, cached_fa)
-            if ok and ret ~= 0 then
-                local hi = ffi.cast("uint64_t", cached_fa.wtime.hi)
-                local lo = ffi.cast("uint64_t", cached_fa.wtime.lo)
-                local ft = hi * 4294967296ULL + lo
-                if ft > 116444736000000000ULL then
-                    return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
-                end
-            end
-            return nil
-        end
-    end
-
-    local a_time = gp_proxy(gp_addr, h_k32, "GetSystemTimeAsFileTime")
-    if a_time and a_time ~= 0 then
-        local proxy_time = ffi.cast("void (__thiscall*)(uintptr_t, void*)", proxy_addr)
-        winapi.get_system_time = function()
-            local ok = pcall(proxy_time, a_time, cached_ft)
-            if ok then
-                local hi = ffi.cast("uint64_t", cached_ft.hi)
-                local lo = ffi.cast("uint64_t", cached_ft.lo)
-                local ft = hi * 4294967296ULL + lo
-                if ft > 116444736000000000ULL then
-                    return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
-                end
-            end
-            return nil
-        end
-    end
-end)
-
 local function unix_now()
     if client and client.unix_time then
         local ok, t = pcall(client.unix_time)
@@ -678,29 +610,7 @@ local function unix_now()
         local ok, t = pcall(os.time)
         if ok and t and tonumber(t) and tonumber(t) > 1000000000 then return tonumber(t) end
     end
-    if client and client.timestamp then
-        local ok, ms = pcall(client.timestamp)
-        if ok and ms and tonumber(ms) and tonumber(ms) > 1000000000000 then
-            return math.floor(tonumber(ms) / 1000)
-        end
-    end
-    if winapi.get_system_time then
-        local ok, t = pcall(winapi.get_system_time)
-        if ok and t and tonumber(t) and tonumber(t) > 1000000000 then return tonumber(t) end
-    end
     return nil
-end
-
-local function parse_iso(str)
-    if type(str) ~= "string" then return nil end
-    local y, m, d, h, mi, s = str:match("(%d+)-(%d+)-(%d+)[T ](%d+):(%d+):(%d+)")
-    if not y then return nil end
-    y, m, d, h, mi, s = tonumber(y), tonumber(m), tonumber(d), tonumber(h), tonumber(mi), tonumber(s)
-    local dbm = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}
-    local days = (y - 1970) * 365 + math.floor((y - 1969) / 4) - math.floor((y - 1901) / 100) + math.floor((y - 1601) / 400)
-    days = days + dbm[m] + (d - 1)
-    if (y % 4 == 0 and (y % 100 ~= 0 or y % 400 == 0)) and m > 2 then days = days + 1 end
-    return days * 86400 + h * 3600 + mi * 60 + s
 end
 
 local menu_color_ref   = ui.reference("MISC", "Settings", "Menu color")
@@ -743,18 +653,10 @@ local script_relpath      = {}
 local loaded              = {}
 local script_load_times   = {}
 local script_unload_times = {}
-local script_file_times   = {}
 local preset_load_times   = {}
 local preset_unload_times = {}
 local presets             = (database and database.read and database.read("multi_loader_presets")) or {}
 local active_preset       = nil
-local repo_updated_at     = nil
-
-for _, p in ipairs(presets) do
-    if not p.updated_at and database and database.read then
-        p.updated_at = database.read("multi_loader_preset_updated_" .. p.name)
-    end
-end
 
 do
     local default_global_scripts = {
@@ -767,36 +669,7 @@ do
         "Visual fog.lua", "Wraith beta.lua",
     }
 
-    local default_aa_scripts = {
-        "AcatelBeta.lua", "Acidtech.lua", "Aesthetic.lua", "Aimtools.lua",
-        "Alien.lua", "Alpha_gs.lua", "AlphaBuild.lua",
-        "Ambani.lua", "Amina-yaw.lua", "Amnesia.lua", "Amphibia.lua",
-        "Angelwings.lua", "Angelwingsfixxxxlasttt.lua", "Annesty.lua",
-        "Astra.lua", "Aura.lua",
-        "Avensive.lua", "Bloodlust.lua", "Bloodstone.lua", "Bloomtool.lua",
-        "Bluhgang.lua", "Bolt.lua", "Calypso.lua", "Carinthia.lua",
-        "Chernobyl.lua", "CorsaResolver.lua", "Dangerous.lua", "Dash.lua",
-        "Dejavu.lua", "Divine.lua", "Drainyaw.lua", "Ecstasy.lua",
-        "Elders.lua", "Elixir.lua", "Emberlash.lua", "Emotional.lua",
-        "Enderphobia.lua", "Enthusiasm.lua", "Ephoria.lua", "Eternity.lua",
-        "Etternace.lua", "Everlast.lua", "Excellent.lua", "Exscord.lua",
-        "Feelsense.lua", "Flax-yaw.lua", "Genesis.lua", "Genesisdump.lua",
-        "Gloriosa-pasted.lua", "Halflife.lua", "Helios.lua", "Hellyaw.lua",
-        "Hyperion.lua", "HysteriaDebug.lua", "Inferno.lua", "Infinixdump.lua",
-        "Interitus.lua", "INVINSIBLE.lua", "Jitterdev.lua", "Kitten.lua",
-        "Kittyhook.lua", "Komaru.lua", "Lavender.lua", "Leaf-recode.lua",
-        "Leviatan.lua", "Lonely.lua", "Lotus.lua", "Luasense.lua",
-        "Mercury.lua", "Metasetrecode.lua", "Mewtwotech.lua", "Mlc-yaw recode.lua",
-        "Model_changer.lua", "Moisten.lua", "Momentum.lua", "Myth.lua",
-        "Mytools.lua", "New hysteria.lua", "Nighcore.lua", "Nyahook.lua",
-        "Omegamoe.lua", "Onesensedev.lua", "Opulent.lua", "Outlaw.lua",
-        "Ozndump.lua", "Paradise.lua", "Rebellion.lua", "Resolverx.lua",
-        "Rinnegan.lua", "Risen.lua", "Risennew.lua", "Romance.lua",
-        "Sanchez.lua", "Senkotech.lua", "Serenity.lua", "Starlight.lua",
-        "Stellar.lua", "Symmtest.lua", "Syphonic.lua", "Tabsense.lua",
-        "Universe.lua", "Vandal.lua", "Venco.lua", "Venus.lua",
-        "Winter.lua", "Wraith.lua", "Xo-yaw.lua", "Zephyrus.lua",
-    }
+    local default_aa_scripts = {}
 
     for _, sn in ipairs(default_global_scripts) do
         local rel = "other/" .. sn
@@ -806,7 +679,7 @@ do
         script_category[sn] = "Global storage"
         script_relpath[sn] = rel
         script_urls[sn] = du
-        script_meta[sn] = { size = 0, sha = nil, url = du, updated_at = nil }
+        script_meta[sn] = { size = 0, sha = nil, url = du }
     end
 
     for _, sn in ipairs(default_aa_scripts) do
@@ -817,7 +690,7 @@ do
         script_category[sn] = "Anti-aimbot scripts"
         script_relpath[sn] = rel
         script_urls[sn] = du
-        script_meta[sn] = { size = 0, sha = nil, url = du, updated_at = nil }
+        script_meta[sn] = { size = 0, sha = nil, url = du }
     end
 
     table.sort(scripts, function(a, b) return a:lower() < b:lower() end)
@@ -830,27 +703,18 @@ if database and database.read then
     local ok2, v2 = pcall(database.read, "multi_loader_active_preset")
     if ok2 and type(v2) == "string" and #v2 > 0 then active_preset = v2 end
 
-    local ok3, v3 = pcall(database.read, "multi_loader_repo_time")
-    if ok3 and type(v3) == "number" and v3 > 0 then repo_updated_at = v3 end
-
     local ok4, v4 = pcall(database.read, "multi_loader_cached_scripts")
     local ok5, v5 = pcall(database.read, "multi_loader_cached_cat")
     local ok6, v6 = pcall(database.read, "multi_loader_cached_rel")
-    if ok4 and type(v4) == "table" and #v4 >= 50 and ok5 and type(v5) == "table" and ok6 and type(v6) == "table" then
-        local aa_cnt = 0
-        for _, s in ipairs(v4) do
-            if v5[s] == "Anti-aimbot scripts" then aa_cnt = aa_cnt + 1 end
-        end
-        if aa_cnt >= 20 then
-            scripts = v4
-            script_category = v5
-            script_relpath = v6
-        end
+    if ok4 and type(v4) == "table" and #v4 >= 5 and ok5 and type(v5) == "table" and ok6 and type(v6) == "table" then
+        scripts = v4
+        script_category = v5
+        script_relpath = v6
     end
 end
 
 local current_items = {}
-local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload, precalculate_local_times
+local build_list, update_list, update_vis, toggle_preset, fetch_scripts, load_script, unload_script, check_autoload
 
 local AA_SEPARATOR = "-- Only one AA lua can be selected"
 local NO_AA_LABEL  = "No AA script loaded*"
@@ -1034,7 +898,6 @@ local menu = pui.group("config", "presets")
 local refresh  = menu:button("Refresh script list", function() fetch_scripts() end)
 local category = menu:combobox("\n", {"Global storage", "Anti-aimbot scripts"})
 local list     = menu:listbox(" ", {""})
-local info     = menu:label("Loading...")
 local reload   = menu:checkbox("Save scripts locally")
 
 if database and database.read then
@@ -1357,15 +1220,10 @@ function load_script(s_name, silent)
                         ensure_dir("multi-loader/misc stuff")
                         ensure_dir("multi-loader/anti-aimbot")
                         if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
-                        local now = unix_now()
-                        local script_up = (meta and meta.updated_at) or repo_updated_at
-                        if script_up then script_file_times[s_name] = script_up end
                         if database and database.write then
                             if meta and meta.sha then pcall(database.write, "multi_loader_sha_" .. s_name, meta.sha) end
                             pcall(database.write, "multi_loader_size_"       .. s_name, #resp.body)
                             pcall(database.write, "multi_loader_lines_"      .. s_name, new_ln)
-                            if script_up then pcall(database.write, "multi_loader_updated_" .. s_name, script_up) end
-                            if now then pcall(database.write, "multi_loader_downloaded_" .. s_name, now) end
                             if database.flush then pcall(database.flush) end
                         end
                         execute(resp.body, s_name, silent)
@@ -1393,15 +1251,10 @@ function load_script(s_name, silent)
                 ensure_dir("multi-loader/misc stuff")
                 ensure_dir("multi-loader/anti-aimbot")
                 if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
-                local now = unix_now()
-                local script_up = (meta and meta.updated_at) or repo_updated_at
-                if script_up then script_file_times[s_name] = script_up end
                 if database and database.write then
                     if meta and meta.sha then pcall(database.write, "multi_loader_sha_" .. s_name, meta.sha) end
                     pcall(database.write, "multi_loader_size_"       .. s_name, #resp.body)
                     pcall(database.write, "multi_loader_lines_"      .. s_name, new_ln)
-                    if script_up then pcall(database.write, "multi_loader_updated_" .. s_name, script_up) end
-                    if now then pcall(database.write, "multi_loader_downloaded_" .. s_name, now) end
                     if database.flush then pcall(database.flush) end
                 end
                 execute(resp.body, s_name, silent)
@@ -1526,20 +1379,13 @@ end
 
 local function finish_fetch()
     table.sort(scripts, function(a, b) return a:lower() < b:lower() end)
-    if precalculate_local_times then precalculate_local_times() end
 
-    if #scripts >= 50 and database and database.write then
-        local aa_cnt = 0
-        for _, s in ipairs(scripts) do
-            if script_category[s] == "Anti-aimbot scripts" then aa_cnt = aa_cnt + 1 end
-        end
-        if aa_cnt >= 20 then
-            pcall(database.write, "multi_loader_cached_scripts", scripts)
-            pcall(database.write, "multi_loader_cached_meta", script_meta)
-            pcall(database.write, "multi_loader_cached_cat", script_category)
-            pcall(database.write, "multi_loader_cached_rel", script_relpath)
-            if database.flush then pcall(database.flush) end
-        end
+    if #scripts >= 5 and database and database.write then
+        pcall(database.write, "multi_loader_cached_scripts", scripts)
+        pcall(database.write, "multi_loader_cached_meta", script_meta)
+        pcall(database.write, "multi_loader_cached_cat", script_category)
+        pcall(database.write, "multi_loader_cached_rel", script_relpath)
+        if database.flush then pcall(database.flush) end
     end
 
     if #scripts > 0 then
@@ -1601,138 +1447,58 @@ function fetch_scripts()
     update_list()
 
     local json = ml_json()
-
-    http.get("https://github.com/" .. repo .. "/commits/main.atom", function(ok, resp)
-        if ok and resp.status == 200 and type(resp.body) == "string" then
-            local iso = resp.body:match("<updated>([^<]+)</updated>")
-            if iso then
-                local ts = parse_iso(iso)
-                if ts and ts > 1000000000 then
-                    repo_updated_at = ts
-                    if database and database.write then
-                        pcall(database.write, "multi_loader_repo_time", ts)
-                        if database.flush then pcall(database.flush) end
-                    end
-                end
-            end
-        end
-    end)
-
-    local function apply_manifest(data)
-        if not (type(data) == "table" and type(data.scripts) == "table" and #data.scripts >= 20) then
-            return false
-        end
-
-        if data.updated_at and tonumber(data.updated_at) then
-            repo_updated_at = tonumber(data.updated_at)
-            if database and database.write then
-                pcall(database.write, "multi_loader_repo_time", repo_updated_at)
-            end
-        end
-
-        local new_s, new_u, new_m = {}, {}, {}
-        local new_c, new_r = {}, {}
-
-        for _, item in ipairs(data.scripts) do
-            if item.name and item.relpath then
-                local sn = item.name
-                local cat = item.category or "Global storage"
-                local rel = item.relpath
-                local folder = rel:match("^([^/]+)/") or "other"
-                local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
-                local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
-                local up = tonumber(item.updated_at)
-                table.insert(new_s, sn)
-                new_u[sn] = du
-                new_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = up }
-                new_c[sn] = cat
-                new_r[sn] = rel
-            end
-        end
-
-        if #new_s >= 20 then
-            state.last_update = globals.realtime()
-            state.loading = false
-            state.connected = true
-            scripts, script_urls, script_meta = new_s, new_u, new_m
-            script_category, script_relpath = new_c, new_r
-            finish_fetch()
-            return true
-        end
-        return false
-    end
-
-    local cache_buster = "?v=" .. (unix_now() or math.floor(globals.realtime()))
-    local raw_manifest_url = "https://raw.githubusercontent.com/" .. repo .. "/main/manifest.json" .. cache_buster
-    http.get(raw_manifest_url, function(ok, resp)
+    local tree_url = "https://api.github.com/repos/" .. repo .. "/git/trees/main?recursive=1"
+    http.get(tree_url, function(ok, resp)
         if ok and resp.status == 200 then
             local ok2, data = pcall(json.parse, resp.body)
-            if ok2 and apply_manifest(data) then return end
-        end
-
-        local cdn_manifest_url = "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/manifest.json" .. cache_buster
-        http.get(cdn_manifest_url, function(ok2, resp2)
-            if ok2 and resp2.status == 200 then
-                local ok3, data2 = pcall(json.parse, resp2.body)
-                if ok3 and apply_manifest(data2) then return end
-            end
-
-            local tree_url = "https://api.github.com/repos/" .. repo .. "/git/trees/main?recursive=1"
-            http.get(tree_url, function(ok3, resp3)
-                if ok3 and resp3.status == 200 then
-                    local ok4, data3 = pcall(json.parse, resp3.body)
-                    if ok4 and type(data3) == "table" and type(data3.tree) == "table" then
-                        local found_s, found_u, found_m = {}, {}, {}
-                        local found_c, found_r = {}, {}
-                        local fallback_up = repo_updated_at or (database and database.read and database.read("multi_loader_repo_time"))
-                        for _, item in ipairs(data3.tree) do
-                            if item.type == "blob" and item.path and item.path:find("%.lua$") then
-                                local folder, sn = item.path:match("^scripts/([^/]+)/(.+%.lua)$")
-                                if not folder then
-                                    sn = item.path:match("^scripts/(.+%.lua)$")
-                                    folder = "other"
-                                end
-                                if sn then
-                                    local f_low = folder:lower()
-                                    local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global storage"
-                                    if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
-                                    local rel = folder .. "/" .. sn
-                                    local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
-                                    local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
-                                    local prev_up = script_meta[sn] and script_meta[sn].updated_at
-                                    table.insert(found_s, sn)
-                                    found_u[sn] = du
-                                    found_m[sn] = { size = item.size, sha = item.sha, url = du, updated_at = prev_up or fallback_up }
-                                    found_c[sn] = cat
-                                    found_r[sn] = rel
-                                end
-                            end
+            if ok2 and type(data) == "table" and type(data.tree) == "table" then
+                local found_s, found_u, found_m = {}, {}, {}
+                local found_c, found_r = {}, {}
+                for _, item in ipairs(data.tree) do
+                    if item.type == "blob" and item.path and item.path:find("%.lua$") then
+                        local folder, sn = item.path:match("^scripts/([^/]+)/(.+%.lua)$")
+                        if not folder then
+                            sn = item.path:match("^scripts/(.+%.lua)$")
+                            folder = "other"
                         end
-                        if #found_s >= 20 then
-                            state.last_update = globals.realtime()
-                            state.loading = false
-                            state.connected = true
-                            scripts, script_urls, script_meta = found_s, found_u, found_m
-                            script_category, script_relpath = found_c, found_r
-                            finish_fetch()
-                            return
+                        if sn then
+                            local f_low = folder:lower()
+                            local cat = (f_low:find("anti%-aim") or f_low == "aa") and "Anti-aimbot scripts" or "Global storage"
+                            if #sn > 0 then sn = sn:sub(1, 1):upper() .. sn:sub(2) end
+                            local rel = folder .. "/" .. sn
+                            local enc_rel = url_enc(folder) .. "/" .. url_enc(sn)
+                            local du = "https://raw.githubusercontent.com/" .. repo .. "/main/scripts/" .. enc_rel
+                            table.insert(found_s, sn)
+                            found_u[sn] = du
+                            found_m[sn] = { size = item.size, sha = item.sha, url = du }
+                            found_c[sn] = cat
+                            found_r[sn] = rel
                         end
                     end
                 end
-
-                state.loading = false
-                if #scripts > 0 then
-                    state.connected = true
+                if #found_s >= 5 then
                     state.last_update = globals.realtime()
+                    state.loading = false
+                    state.connected = true
+                    scripts, script_urls, script_meta = found_s, found_u, found_m
+                    script_category, script_relpath = found_c, found_r
                     finish_fetch()
-                else
-                    state.connected = false
-                    state.err_code = "Offline"
-                    check_autoload()
-                    update_list()
+                    return
                 end
-            end)
-        end)
+            end
+        end
+
+        state.loading = false
+        if #scripts > 0 then
+            state.connected = true
+            state.last_update = globals.realtime()
+            finish_fetch()
+        else
+            state.connected = false
+            state.err_code = "Offline"
+            check_autoload()
+            update_list()
+        end
     end)
 end
 
@@ -1826,277 +1592,6 @@ function update_list()
     update_vis()
 end
 
-local last_info = ""
-
-local function fmt_ago(prefix, t)
-    if not t or t <= 0 then return "Not updated" end
-    local now = unix_now()
-    if not now then return prefix .. " previously" end
-    local diff = now - t
-    if diff < 0 then
-        if diff >= -300 then
-            return prefix .. " just now"
-        else
-            return prefix .. " recently"
-        end
-    end
-    if diff < 60 then
-        return prefix .. " just now"
-    end
-    local sec = math.floor(diff)
-    if sec < 3600 then
-        local m = math.floor(sec / 60)
-        return string.format("%s %d minute%s ago", prefix, m, m == 1 and "" or "s")
-    elseif sec < 86400 then
-        local h = math.floor(sec / 3600)
-        return string.format("%s %d hour%s ago", prefix, h, h == 1 and "" or "s")
-    elseif sec < 86400 * 7 then
-        local d = math.floor(sec / 86400)
-        return string.format("%s %d day%s ago", prefix, d, d == 1 and "" or "s")
-    elseif sec < 86400 * 30 then
-        local w = math.floor(sec / (86400 * 7))
-        return string.format("%s %d week%s ago", prefix, w, w == 1 and "" or "s")
-    elseif sec < 86400 * 365 then
-        local mo = math.floor(sec / (86400 * 30))
-        return string.format("%s %d month%s ago", prefix, mo, mo == 1 and "" or "s")
-    else
-        local y = math.floor(sec / (86400 * 365))
-        return string.format("%s %d year%s ago", prefix, y, y == 1 and "" or "s")
-    end
-end
-
-local function file_mtime(s_name)
-    if not s_name or s_name == "----" or s_name == "-" then return nil end
-    if is_separator and is_separator(s_name) then return nil end
-    if not winapi or not winapi.get_file_mtime then return nil end
-    local rel = script_relpath and script_relpath[s_name]
-    local candidates = {
-        rel and ("csgo/multi-loader/" .. rel),
-        rel and ("multi-loader/" .. rel),
-        "csgo/multi-loader/other/" .. s_name,
-        "csgo/multi-loader/misc stuff/" .. s_name,
-        "csgo/multi-loader/anti-aimbot/" .. s_name,
-        "multi-loader/other/" .. s_name,
-        "multi-loader/misc stuff/" .. s_name,
-        "multi-loader/anti-aimbot/" .. s_name,
-        "csgo/multi-loader/" .. s_name,
-        "multi-loader/" .. s_name
-    }
-    for _, path in ipairs(candidates) do
-        if path then
-            local t = winapi.get_file_mtime(path)
-            if t and t > 1000000000 then return t end
-        end
-    end
-    return nil
-end
-
-precalculate_local_times = function()
-    for _, sn in ipairs(scripts) do
-        if not (is_separator and is_separator(sn)) then
-            if not script_file_times[sn] and winapi and winapi.get_file_mtime then
-                local mt = file_mtime(sn)
-                if mt and mt > 1000000000 then
-                    script_file_times[sn] = mt
-                end
-            end
-            if not (script_meta[sn] and script_meta[sn].updated_at) and database and database.read then
-                local db_t = database.read("multi_loader_gh_time_" .. sn)
-                if db_t and type(db_t) == "number" and db_t > 1000000000 then
-                    if not script_meta[sn] then script_meta[sn] = {} end
-                    script_meta[sn].updated_at = db_t
-                else
-                    local saved_up = database.read("multi_loader_updated_" .. sn)
-                    if saved_up and type(saved_up) == "number" and saved_up > 1000000000 then
-                        if not script_meta[sn] then script_meta[sn] = {} end
-                        script_meta[sn].updated_at = saved_up
-                    end
-                end
-            end
-        end
-    end
-end
-
-local pending_time_requests = {}
-local get_info_text = nil
-local request_script_time = nil
-
-request_script_time = function(s_name)
-    if not s_name or s_name == "----" or s_name == "-" or is_separator(s_name) or pending_time_requests[s_name] then return end
-    local rel = script_relpath and script_relpath[s_name]
-    if not rel then
-        local is_aa = is_aa_script(s_name)
-        rel = (is_aa and "anti-aimbot/" or "other/") .. s_name
-    end
-
-    if database and database.read then
-        local saved = database.read("multi_loader_gh_time_" .. s_name)
-        if saved and type(saved) == "number" and saved > 1000000000 then
-            if not script_meta[s_name] then script_meta[s_name] = {} end
-            script_meta[s_name].updated_at = saved
-            return
-        end
-    end
-
-    pending_time_requests[s_name] = true
-
-    local folder = rel:match("^([^/]+)/") or (is_aa_script(s_name) and "anti-aimbot" or "other")
-    local enc_rel = url_enc(folder) .. "/" .. url_enc(s_name)
-    local atom_url = "https://github.com/" .. repo .. "/commits/main/scripts/" .. enc_rel .. ".atom"
-
-    http.get(atom_url, function(ok, resp)
-        if ok and resp.status == 200 and type(resp.body) == "string" then
-            local iso = resp.body:match("<updated>([^<]+)</updated>")
-            if iso then
-                local ts = parse_iso(iso)
-                if ts and ts > 1000000000 then
-                    pending_time_requests[s_name] = nil
-                    if not script_meta[s_name] then script_meta[s_name] = {} end
-                    script_meta[s_name].updated_at = ts
-                    if database and database.write then
-                        pcall(database.write, "multi_loader_gh_time_" .. s_name, ts)
-                        if database.flush then pcall(database.flush) end
-                    end
-                    local cur_idx = list and list:get()
-                    local cur_item = cur_idx and current_items and current_items[cur_idx + 1]
-                    if cur_item and cur_item.type == "script" and cur_item.name == s_name then
-                        if get_info_text then
-                            local txt = get_info_text()
-                            if txt ~= last_info then
-                                last_info = txt
-                                info:set(txt)
-                            end
-                        end
-                    end
-                    return
-                end
-            end
-        end
-
-        local api_commit_url = "https://api.github.com/repos/" .. repo .. "/commits?path=" .. url_enc("scripts/" .. folder .. "/" .. s_name) .. "&page=1&per_page=1"
-        http.get(api_commit_url, function(ok2, resp2)
-            pending_time_requests[s_name] = nil
-            if ok2 and resp2.status == 200 and type(resp2.body) == "string" then
-                local iso2 = resp2.body:match('"date"%s*:%s*"(%d+%-%d+%-%d+T%d+:%d+:%d+)Z?"') or resp2.body:match('"date"%s*:%s*"([^"]+)"')
-                if iso2 then
-                    local ts2 = parse_iso(iso2)
-                    if ts2 and ts2 > 1000000000 then
-                        if not script_meta[s_name] then script_meta[s_name] = {} end
-                        script_meta[s_name].updated_at = ts2
-                        if database and database.write then
-                            pcall(database.write, "multi_loader_gh_time_" .. s_name, ts2)
-                            if database.flush then pcall(database.flush) end
-                        end
-                        local cur_idx = list and list:get()
-                        local cur_item = cur_idx and current_items and current_items[cur_idx + 1]
-                        if cur_item and cur_item.type == "script" and cur_item.name == s_name then
-                            if get_info_text then
-                                local txt = get_info_text()
-                                if txt ~= last_info then
-                                    last_info = txt
-                                    info:set(txt)
-                                end
-                            end
-                        end
-                        return
-                    end
-                end
-            end
-            local cur_idx = list and list:get()
-            local cur_item = cur_idx and current_items and current_items[cur_idx + 1]
-            if cur_item and cur_item.type == "script" and cur_item.name == s_name then
-                if get_info_text then
-                    local txt = get_info_text()
-                    if txt ~= last_info then
-                        last_info = txt
-                        info:set(txt)
-                    end
-                end
-            end
-        end)
-    end)
-end
-
-get_info_text = function()
-    if state.loading then
-        local step = math.floor((globals.realtime() - state.load_start) / 0.25) % 3 + 1
-        return "Loading" .. string.rep(".", step)
-    end
-    if not state.connected and #scripts == 0 then
-        return "Failed to connect: " .. state.err_code
-    end
-
-    local idx  = list:get()
-    local item = current_items[idx + 1]
-
-    if not item or item.type == "header" or item.type == "empty" then
-        local current_cat = category and category:get() or "Global storage"
-        local count = 0
-        for _, s in ipairs(scripts) do
-            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
-        end
-        return string.format("%d script%s available", count, count == 1 and "" or "s")
-    end
-
-    if item.type == "script" then
-        local s_name = item.name
-        local mtime  = script_file_times[s_name] or file_mtime(s_name)
-        if mtime and not script_file_times[s_name] then
-            script_file_times[s_name] = mtime
-        end
-
-        local gh_time = (script_meta[s_name] and script_meta[s_name].updated_at)
-        if not gh_time and database and database.read then
-            local db_t = database.read("multi_loader_gh_time_" .. s_name)
-            if db_t and type(db_t) == "number" and db_t > 1000000000 then
-                gh_time = db_t
-                if script_meta[s_name] then script_meta[s_name].updated_at = db_t end
-            end
-        end
-
-        local t = nil
-        if mtime and gh_time then
-            t = (mtime > gh_time) and mtime or gh_time
-        elseif gh_time then
-            t = gh_time
-        elseif mtime then
-            t = mtime
-        end
-
-        if not t and database and database.read then
-            local saved_up = database.read("multi_loader_updated_" .. s_name)
-            if saved_up and type(saved_up) == "number" and saved_up > 1000000000 then
-                t = saved_up
-            end
-        end
-
-        if not t and request_script_time then
-            request_script_time(s_name)
-        end
-
-        if t and t > 1000000000 then
-            return fmt_ago("Updated", t)
-        elseif repo_updated_at and repo_updated_at > 1000000000 then
-            return fmt_ago("Updated", repo_updated_at)
-        else
-            return "Not updated"
-        end
-    elseif item.type == "preset" then
-        local p = item.data
-        local t = (p and p.updated_at) or (database and database.read and database.read("multi_loader_preset_updated_" .. item.name))
-        return t and fmt_ago("Updated", t) or "Not updated"
-    elseif item.type == "new_preset" then
-        return "Auto-loads selected scripts"
-    else
-        local current_cat = category and category:get() or "Global storage"
-        local count = 0
-        for _, s in ipairs(scripts) do
-            if (script_category[s] or "Global storage") == current_cat then count = count + 1 end
-        end
-        return string.format("%d script%s available", count, count == 1 and "" or "s")
-    end
-end
-
 local was_new = false
 
 function update_vis()
@@ -2111,8 +1606,6 @@ function update_vis()
     end
 
     if not item or item.type == "error" or item.type == "empty" then
-        local err_txt = (item and item.type == "empty") and "Category is empty" or ("Failed to connect: " .. state.err_code)
-        if err_txt ~= last_info then last_info = err_txt; info:set(err_txt) end
         btn_load_script:set_visible(false); btn_unload_script:set_visible(false)
         btn_load_preset:set_visible(false); btn_unload_preset:set_visible(false)
         btn_delete_preset:set_visible(false); edit_preset_scripts:set_visible(false)
@@ -2122,9 +1615,6 @@ function update_vis()
         was_new = false
         return
     end
-
-    local txt = get_info_text()
-    if txt ~= last_info then last_info = txt; info:set(txt) end
 
     local is_new    = (item.type == "new_preset")
     local is_script = (item.type == "script")
@@ -2257,10 +1747,6 @@ reload:set_callback(function()
     end
 end)
 
-local last_step      = -1
-local last_sec       = -1
-local last_sel       = -1
-
 client.set_event_callback("paint_ui", function()
     if not ui.is_menu_open() then return end
 
@@ -2271,25 +1757,6 @@ client.set_event_callback("paint_ui", function()
         last_accent_hex = acc
         update_list()
     end
-
-    if state.loading then
-        local step = math.floor((globals.realtime() - state.load_start) / 0.25) % 3 + 1
-        if step ~= last_step then
-            last_step = step
-            local txt = "Loading" .. string.rep(".", step)
-            if txt ~= last_info then last_info = txt; info:set(txt) end
-        end
-        return
-    end
-
-    local cur_sec = math.floor(globals.realtime())
-    local cur_idx = list:get()
-    if cur_sec == last_sec and cur_idx == last_sel then return end
-    last_sec = cur_sec
-    last_sel = cur_idx
-
-    local txt = get_info_text()
-    if txt ~= last_info then last_info = txt; info:set(txt) end
 end)
 
 if menu_color_ref then
@@ -2300,7 +1767,6 @@ if menu_color_ref then
 end
 
 update_list()
-if precalculate_local_times then precalculate_local_times() end
 fetch_scripts()
 
 real_set_event_cb("shutdown", function()
