@@ -607,91 +607,92 @@ pcall(ffi.cdef, [[
         ml_FILETIME ctime; ml_FILETIME atime; ml_FILETIME wtime;
         uint32_t   size_hi; uint32_t size_lo;
     } ml_WIN32_FA_DATA;
-    int __stdcall GetFileAttributesExA(const char* path, int lvl, void* out);
-    void __stdcall GetSystemTimeAsFileTime(ml_FILETIME* ft);
-    long time(long*);
 ]])
 
-local k32 = pcall(ffi.load, "kernel32") and ffi.load("kernel32") or nil
-local crt = pcall(ffi.load, "msvcrt") and ffi.load("msvcrt") or nil
 local cached_ft = ffi.new("ml_FILETIME")
 local cached_fa = ffi.new("ml_WIN32_FA_DATA")
 
-local proxy_fa = nil
-local proxy_time = nil
+local winapi = {
+    get_file_mtime = nil,
+    get_system_time = nil,
+}
+
 pcall(function()
-    local proxy = client.find_signature("client.dll", string.char(0x51, 0xC3))
-    local gm = client.find_signature("client.dll", string.char(0xC6, 0x06, 0x00, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x50))
-    local gp = client.find_signature("client.dll", string.char(0x50, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x85, 0xC0, 0x0F, 0x84, 0xCC, 0xCC, 0xCC, 0xCC, 0x6A, 0x00))
-    if proxy and gm and gp then
-        local gm_addr = ffi.cast("void***", ffi.cast("char*", gm) + 5)[0][0]
-        local gm_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, const char*)", proxy)
-        local gp_addr = ffi.cast("void***", ffi.cast("char*", gp) + 3)[0][0]
-        local gp_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, uintptr_t, const char*)", proxy)
-        local h_k32 = gm_proxy(gm_addr, "kernel32.dll")
-        if h_k32 and h_k32 ~= 0 then
-            local a_fa = gp_proxy(gp_addr, h_k32, "GetFileAttributesExA")
-            if a_fa and a_fa ~= 0 then
-                proxy_fa = ffi.cast("int (__stdcall*)(const char*, int, void*)", a_fa)
+    local proxy_addr = client.find_signature("client.dll", string.char(0x51, 0xC3))
+    local gm_patern = client.find_signature("client.dll", string.char(0xC6, 0x06, 0x00, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x50))
+    local gp_patern = client.find_signature("client.dll", string.char(0x50, 0xFF, 0x15, 0xCC, 0xCC, 0xCC, 0xCC, 0x85, 0xC0, 0x0F, 0x84, 0xCC, 0xCC, 0xCC, 0xCC, 0x6A, 0x00))
+    if not (proxy_addr and gm_patern and gp_patern) then return end
+
+    local gm_addr = ffi.cast("void***", ffi.cast("char*", gm_patern) + 5)[0][0]
+    local gm_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, const char*)", proxy_addr)
+
+    local gp_addr = ffi.cast("void***", ffi.cast("char*", gp_patern) + 3)[0][0]
+    local gp_proxy = ffi.cast("uintptr_t (__thiscall*)(void*, uintptr_t, const char*)", proxy_addr)
+
+    local h_k32 = gm_proxy(gm_addr, "kernel32.dll")
+    if not h_k32 or h_k32 == 0 then return end
+
+    local a_fa = gp_proxy(gp_addr, h_k32, "GetFileAttributesExA")
+    if a_fa and a_fa ~= 0 then
+        local proxy_fa = ffi.cast("int (__thiscall*)(uintptr_t, const char*, int, void*)", proxy_addr)
+        winapi.get_file_mtime = function(path)
+            if not path then return nil end
+            local ok, ret = pcall(proxy_fa, a_fa, path, 0, cached_fa)
+            if ok and ret ~= 0 then
+                local hi = ffi.cast("uint64_t", cached_fa.wtime.hi)
+                local lo = ffi.cast("uint64_t", cached_fa.wtime.lo)
+                local ft = hi * 4294967296ULL + lo
+                if ft > 116444736000000000ULL then
+                    return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
+                end
             end
-            local a_time = gp_proxy(gp_addr, h_k32, "GetSystemTimeAsFileTime")
-            if a_time and a_time ~= 0 then
-                proxy_time = ffi.cast("void (__stdcall*)(void*)", a_time)
+            return nil
+        end
+    end
+
+    local a_time = gp_proxy(gp_addr, h_k32, "GetSystemTimeAsFileTime")
+    if a_time and a_time ~= 0 then
+        local proxy_time = ffi.cast("void (__thiscall*)(uintptr_t, void*)", proxy_addr)
+        winapi.get_system_time = function()
+            local ok = pcall(proxy_time, a_time, cached_ft)
+            if ok then
+                local hi = ffi.cast("uint64_t", cached_ft.hi)
+                local lo = ffi.cast("uint64_t", cached_ft.lo)
+                local ft = hi * 4294967296ULL + lo
+                if ft > 116444736000000000ULL then
+                    return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
+                end
             end
+            return nil
         end
     end
 end)
 
 local function unix_now()
-    if panorama and panorama.loadstring then
-        local ok, fn = pcall(panorama.loadstring, "return Math.floor(Date.now() / 1000)")
-        if ok and type(fn) == "function" then
-            local ok2, res = pcall(fn)
-            if ok2 and res and tonumber(res) and tonumber(res) > 1000000000 then
-                return tonumber(res)
-            end
-        end
-    end
-    if crt and crt.time then
-        local ok, t = pcall(crt.time, nil)
-        if ok and t and tonumber(t) and tonumber(t) > 1000000000 then
-            return tonumber(t)
-        end
-    end
-    if k32 and k32.GetSystemTimeAsFileTime then
-        local ok, res = pcall(function()
-            k32.GetSystemTimeAsFileTime(cached_ft)
-            local hi = ffi.cast("uint64_t", cached_ft.hi)
-            local lo = ffi.cast("uint64_t", cached_ft.lo)
-            local t64 = hi * 4294967296ULL + lo
-            if t64 > 116444736000000000ULL then
-                return tonumber((t64 - 116444736000000000ULL) / 10000000ULL)
-            end
-        end)
-        if ok and res and res > 1000000000 then return res end
-    end
-    if proxy_time then
-        local ok, res = pcall(function()
-            proxy_time(cached_ft)
-            local hi = ffi.cast("uint64_t", cached_ft.hi)
-            local lo = ffi.cast("uint64_t", cached_ft.lo)
-            local t64 = hi * 4294967296ULL + lo
-            if t64 > 116444736000000000ULL then
-                return tonumber((t64 - 116444736000000000ULL) / 10000000ULL)
-            end
-        end)
-        if ok and res and res > 1000000000 then return res end
+    if client and client.unix_time then
+        local ok, t = pcall(client.unix_time)
+        if ok and t and tonumber(t) and tonumber(t) > 1000000000 then return tonumber(t) end
     end
     if os and os.time then
         local ok, t = pcall(os.time)
-        if ok and t and t > 1000000000 then return t end
+        if ok and t and tonumber(t) and tonumber(t) > 1000000000 then return tonumber(t) end
+    end
+    if client and client.timestamp then
+        local ok, ms = pcall(client.timestamp)
+        if ok and ms and tonumber(ms) and tonumber(ms) > 1000000000000 then
+            return math.floor(tonumber(ms) / 1000)
+        end
+    end
+    if winapi.get_system_time then
+        local ok, t = pcall(winapi.get_system_time)
+        if ok and t and tonumber(t) and tonumber(t) > 1000000000 then return tonumber(t) end
     end
     return nil
 end
 
 local function parse_iso(str)
     if type(str) ~= "string" then return nil end
-    local y, m, d, h, mi, s = str:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+    local y, m, d, h, mi, s = str:match("(%d+)-(%d+)-(%d+)[T ](%d+):(%d+):(%d+)")
     if not y then return nil end
     y, m, d, h, mi, s = tonumber(y), tonumber(m), tonumber(d), tonumber(h), tonumber(mi), tonumber(s)
     local dbm = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}
@@ -702,7 +703,8 @@ local function parse_iso(str)
 end
 
 local function file_mtime(s_name)
-    if not s_name or s_name == "----" or s_name == "-" then return nil end
+    if not s_name or s_name == "----" or s_name == "-" or is_separator(s_name) then return nil end
+    if not winapi.get_file_mtime then return nil end
     local rel = script_relpath and script_relpath[s_name]
     local candidates = {
         rel and ("csgo/multi-loader/" .. rel),
@@ -714,23 +716,10 @@ local function file_mtime(s_name)
         "csgo/multi-loader/" .. s_name,
         "multi-loader/" .. s_name
     }
-    local fn = (k32 and k32.GetFileAttributesExA) or proxy_fa or (ffi.C and pcall(function() return ffi.C.GetFileAttributesExA end) and ffi.C.GetFileAttributesExA)
-    if not fn then return nil end
     for _, path in ipairs(candidates) do
         if path then
-            local ok, res = pcall(function()
-                if fn(path, 0, cached_fa) ~= 0 then
-                    local hi = ffi.cast("uint64_t", cached_fa.wtime.hi)
-                    local lo = ffi.cast("uint64_t", cached_fa.wtime.lo)
-                    if hi > 0ULL or lo > 0ULL then
-                        local ft = hi * 4294967296ULL + lo
-                        if ft > 116444736000000000ULL then
-                            return tonumber((ft - 116444736000000000ULL) / 10000000ULL)
-                        end
-                    end
-                end
-            end)
-            if ok and res and res > 1000000000 then return res end
+            local t = winapi.get_file_mtime(path)
+            if t and t > 1000000000 then return t end
         end
     end
     return nil
@@ -1068,7 +1057,7 @@ local menu = pui.group("config", "presets")
 local refresh  = menu:button("Refresh script list", function() fetch_scripts() end)
 local category = menu:combobox("\n", {"Global storage", "Anti-aimbot scripts"})
 local list     = menu:listbox(" ", {""})
-local info     = menu:label("Updated 0 seconds ago")
+local info     = menu:label("Loading...")
 local reload   = menu:checkbox("Save scripts locally")
 
 if database and database.read then
@@ -1390,14 +1379,14 @@ function load_script(s_name, silent)
                         ensure_dir("multi-loader/anti-aimbot")
                         if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
                         local now = unix_now()
-                        local script_up = (meta and meta.updated_at) or repo_updated_at or now
-                        script_file_times[s_name] = script_up
+                        local script_up = (meta and meta.updated_at) or repo_updated_at
+                        if script_up then script_file_times[s_name] = script_up end
                         if database and database.write then
                             if meta and meta.sha then pcall(database.write, "multi_loader_sha_" .. s_name, meta.sha) end
                             pcall(database.write, "multi_loader_size_"       .. s_name, #resp.body)
                             pcall(database.write, "multi_loader_lines_"      .. s_name, new_ln)
-                            pcall(database.write, "multi_loader_updated_"    .. s_name, script_up)
-                            pcall(database.write, "multi_loader_downloaded_" .. s_name, now)
+                            if script_up then pcall(database.write, "multi_loader_updated_" .. s_name, script_up) end
+                            if now then pcall(database.write, "multi_loader_downloaded_" .. s_name, now) end
                             if database.flush then pcall(database.flush) end
                         end
                         execute(resp.body, s_name, silent)
@@ -1425,14 +1414,14 @@ function load_script(s_name, silent)
                 ensure_dir("multi-loader/anti-aimbot")
                 if writefile then pcall(writefile, "multi-loader/" .. rel, resp.body) end
                 local now = unix_now()
-                local script_up = (meta and meta.updated_at) or repo_updated_at or now
-                script_file_times[s_name] = script_up
+                local script_up = (meta and meta.updated_at) or repo_updated_at
+                if script_up then script_file_times[s_name] = script_up end
                 if database and database.write then
                     if meta and meta.sha then pcall(database.write, "multi_loader_sha_" .. s_name, meta.sha) end
                     pcall(database.write, "multi_loader_size_"       .. s_name, #resp.body)
                     pcall(database.write, "multi_loader_lines_"      .. s_name, new_ln)
-                    pcall(database.write, "multi_loader_updated_"    .. s_name, script_up)
-                    pcall(database.write, "multi_loader_downloaded_" .. s_name, now)
+                    if script_up then pcall(database.write, "multi_loader_updated_" .. s_name, script_up) end
+                    if now then pcall(database.write, "multi_loader_downloaded_" .. s_name, now) end
                     if database.flush then pcall(database.flush) end
                 end
                 execute(resp.body, s_name, silent)
@@ -1631,6 +1620,22 @@ function fetch_scripts()
     update_list()
 
     local json = ml_json()
+
+    http.get("https://github.com/" .. repo .. "/commits/main.atom", function(ok, resp)
+        if ok and resp.status == 200 and type(resp.body) == "string" then
+            local iso = resp.body:match("<updated>([^<]+)</updated>")
+            if iso then
+                local ts = parse_iso(iso)
+                if ts and ts > 1000000000 then
+                    repo_updated_at = ts
+                    if database and database.write then
+                        pcall(database.write, "multi_loader_repo_time", ts)
+                        if database.flush then pcall(database.flush) end
+                    end
+                end
+            end
+        end
+    end)
 
     local function apply_manifest(data)
         if not (type(data) == "table" and type(data.scripts) == "table" and #data.scripts >= 20) then
@@ -1845,11 +1850,16 @@ local last_info = ""
 local function fmt_ago(prefix, t)
     if not t or t <= 0 then return "Not updated" end
     local now = unix_now()
-    if not now then return "Not updated" end
+    if not now then return prefix .. " previously" end
     local diff = now - t
-    if diff < -86400 then
-        return "Not updated"
-    elseif diff < 60 then
+    if diff < 0 then
+        if diff >= -300 then
+            return prefix .. " just now"
+        else
+            return prefix .. " recently"
+        end
+    end
+    if diff < 60 then
         return prefix .. " just now"
     end
     local sec = math.floor(diff)
@@ -1859,31 +1869,32 @@ local function fmt_ago(prefix, t)
     elseif sec < 86400 then
         local h = math.floor(sec / 3600)
         return string.format("%s %d hour%s ago", prefix, h, h == 1 and "" or "s")
-    else
+    elseif sec < 86400 * 7 then
         local d = math.floor(sec / 86400)
-        if d < 7 then
-            return string.format("%s %d day%s ago", prefix, d, d == 1 and "" or "s")
-        elseif d < 30 then
-            local w = math.floor(d / 7)
-            return string.format("%s %d week%s ago", prefix, w, w == 1 and "" or "s")
-        elseif d < 365 then
-            local mo = math.floor(d / 30)
-            return string.format("%s %d month%s ago", prefix, mo, mo == 1 and "" or "s")
-        else
-            local y = math.floor(d / 365)
-            return string.format("%s %d year%s ago", prefix, y, y == 1 and "" or "s")
-        end
+        return string.format("%s %d day%s ago", prefix, d, d == 1 and "" or "s")
+    elseif sec < 86400 * 30 then
+        local w = math.floor(sec / (86400 * 7))
+        return string.format("%s %d week%s ago", prefix, w, w == 1 and "" or "s")
+    elseif sec < 86400 * 365 then
+        local mo = math.floor(sec / (86400 * 30))
+        return string.format("%s %d month%s ago", prefix, mo, mo == 1 and "" or "s")
+    else
+        local y = math.floor(sec / (86400 * 365))
+        return string.format("%s %d year%s ago", prefix, y, y == 1 and "" or "s")
     end
 end
 
 local pending_time_requests = {}
-local get_info_text
-local request_script_time
+local get_info_text = nil
+local request_script_time = nil
 
 request_script_time = function(s_name)
-    if not s_name or s_name == "----" or s_name == "-" or pending_time_requests[s_name] then return end
+    if not s_name or s_name == "----" or s_name == "-" or is_separator(s_name) or pending_time_requests[s_name] then return end
     local rel = script_relpath and script_relpath[s_name]
-    if not rel then return end
+    if not rel then
+        local is_aa = is_aa_script(s_name)
+        rel = (is_aa and "anti-aimbot/" or "misc stuff/") .. s_name
+    end
 
     if database and database.read then
         local saved = database.read("multi_loader_gh_time_" .. s_name)
@@ -1896,13 +1907,13 @@ request_script_time = function(s_name)
 
     pending_time_requests[s_name] = true
 
-    local folder = rel:match("^([^/]+)/") or "misc stuff"
+    local folder = rel:match("^([^/]+)/") or (is_aa_script(s_name) and "anti-aimbot" or "misc stuff")
     local enc_rel = url_enc(folder) .. "/" .. url_enc(s_name)
     local atom_url = "https://github.com/" .. repo .. "/commits/main/scripts/" .. enc_rel .. ".atom"
 
     http.get(atom_url, function(ok, resp)
         if ok and resp.status == 200 and type(resp.body) == "string" then
-            local iso = resp.body:match("<updated>(%d+%-%d+%-%d+T%d+:%d+:%d+)Z?</updated>")
+            local iso = resp.body:match("<updated>([^<]+)</updated>")
             if iso then
                 local ts = parse_iso(iso)
                 if ts and ts > 1000000000 then
@@ -1916,10 +1927,12 @@ request_script_time = function(s_name)
                     local cur_idx = list and list:get()
                     local cur_item = cur_idx and current_items and current_items[cur_idx + 1]
                     if cur_item and cur_item.type == "script" and cur_item.name == s_name then
-                        local txt = get_info_text()
-                        if txt ~= last_info then
-                            last_info = txt
-                            info:set(txt)
+                        if get_info_text then
+                            local txt = get_info_text()
+                            if txt ~= last_info then
+                                last_info = txt
+                                info:set(txt)
+                            end
                         end
                     end
                     return
@@ -1927,11 +1940,11 @@ request_script_time = function(s_name)
             end
         end
 
-        local api_commit_url = "https://api.github.com/repos/" .. repo .. "/commits?path=scripts/" .. enc_rel .. "&page=1&per_page=1"
+        local api_commit_url = "https://api.github.com/repos/" .. repo .. "/commits?path=" .. url_enc("scripts/" .. folder .. "/" .. s_name) .. "&page=1&per_page=1"
         http.get(api_commit_url, function(ok2, resp2)
             pending_time_requests[s_name] = nil
             if ok2 and resp2.status == 200 and type(resp2.body) == "string" then
-                local iso2 = resp2.body:match('"date"%s*:%s*"(%d+%-%d+%-%d+T%d+:%d+:%d+)Z?"')
+                local iso2 = resp2.body:match('"date"%s*:%s*"(%d+%-%d+%-%d+T%d+:%d+:%d+)Z?"') or resp2.body:match('"date"%s*:%s*"([^"]+)"')
                 if iso2 then
                     local ts2 = parse_iso(iso2)
                     if ts2 and ts2 > 1000000000 then
@@ -1944,12 +1957,26 @@ request_script_time = function(s_name)
                         local cur_idx = list and list:get()
                         local cur_item = cur_idx and current_items and current_items[cur_idx + 1]
                         if cur_item and cur_item.type == "script" and cur_item.name == s_name then
-                            local txt = get_info_text()
-                            if txt ~= last_info then
-                                last_info = txt
-                                info:set(txt)
+                            if get_info_text then
+                                local txt = get_info_text()
+                                if txt ~= last_info then
+                                    last_info = txt
+                                    info:set(txt)
+                                end
                             end
                         end
+                        return
+                    end
+                end
+            end
+            local cur_idx = list and list:get()
+            local cur_item = cur_idx and current_items and current_items[cur_idx + 1]
+            if cur_item and cur_item.type == "script" and cur_item.name == s_name then
+                if get_info_text then
+                    local txt = get_info_text()
+                    if txt ~= last_info then
+                        last_info = txt
+                        info:set(txt)
                     end
                 end
             end
@@ -1991,7 +2018,7 @@ get_info_text = function()
             end
         end
 
-        if not gh_time then
+        if not gh_time and request_script_time then
             request_script_time(s_name)
         end
 
@@ -2004,10 +2031,21 @@ get_info_text = function()
             t = mtime
         end
 
+        if not t and database and database.read then
+            local saved_up = database.read("multi_loader_updated_" .. s_name)
+            if saved_up and type(saved_up) == "number" and saved_up > 1000000000 then
+                t = saved_up
+            end
+        end
+
         if t and t > 1000000000 then
             return fmt_ago("Updated", t)
-        else
+        elseif pending_time_requests[s_name] then
             return "Checking update time..."
+        elseif repo_updated_at and repo_updated_at > 1000000000 then
+            return fmt_ago("Updated", repo_updated_at)
+        else
+            return "Not updated"
         end
     elseif item.type == "preset" then
         local p = item.data
